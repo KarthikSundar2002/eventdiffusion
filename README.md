@@ -1,6 +1,6 @@
 # EventDiffusion: Learning Native Event Stream Distribution from Videos
 
-**Project page: https://karthiksundar2002.github.io/eventdiffusion/**
+**Project page: https://eventdiffusion.karthiksundar.in/**
 
 Karthik Sundar Senthilkumar, Christopher Thirgood, Simon Hadfield
 

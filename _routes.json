@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "include": ["/assets/clips/*", "/assets/forecast_clips/*", "/assets/downstream/*", "/assets/umbrella/*", "/assets/hero/*"],
+  "exclude": []
+}
