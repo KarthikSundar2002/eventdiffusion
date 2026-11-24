@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EventDiffusion</title>
+<meta name="description" content="EventDiffusion learns the distribution of native asynchronous event streams from real recordings, and generates and forecasts individual events with continuous timestamps from RGB frames.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="EventDiffusion">
+<meta property="og:description" content="Learning Native Event Stream Distribution from Videos">
+<meta property="og:url" content="https://karthiksundar2002.github.io/eventdiffusion/">
+<meta property="og:image" content="https://karthiksundar2002.github.io/eventdiffusion/assets/hero/hero.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<meta http-equiv="Cache-Control" content="no-store, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="icon" href="data:,">
+<script>
+  /* No browser caching (2026-11-24): every asset URL carries a token new on each page load, so nothing from an earlier
+     visit or an earlier build is ever reused, and each video load gets a fresh token on top, so a reloaded video is
+     always fetched anew. The page's own assets are referenced only through ED_NC (data-href / data-poster in the
+     markup), so nothing is requested before the token exists. */
+  { const tok = Date.now().toString(36) + Math.random().toString(36).slice(2, 6); let n = 0;
+    window.ED_NC = (u, fresh) => `${u}${u.includes('?') ? '&' : '?'}v=${tok}${fresh ? '.' + (++n) : ''}`; }
+  /* Theme before first paint: a saved choice, else the system's. */
+  try { const t = localStorage.getItem('ed-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+/* Scrollytelling: each result is a story. The clip panel stays pinned while short steps scroll past, and each step
+   re-arranges the panel's tiles (all drawn from one video, so they stay in sync). Day and Night themes.
+   Colour code: violet (Day) / teal (Night) = EventDiffusion, amber = forecasting; ink = the real recording; grey = baselines. Red / blue inside the clips are event
+   polarities (ON / OFF) and plasma is event time, so neither is used for the interface. */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --raised: #e9ecf1; --line: #d9dde5;
+  --fg: #11141b; --muted: #596173; --dim: #8a91a1;
+  --ours: #5b3fc4; --ours-soft: #e9e4fb; --ours-tag: #5b3fc4; --base: #6b7385;
+  --plate: #ffffff; --on-accent: #ffffff; --fc: #c46a00; --fc-tag: #a65900; --fc-tag-fg: #ffffff; --fc-ink: #a65900;   /* amber: lines and fills / tags and text */
+  --ead: #7a5c00; --esa: #00838f; --etd: #c2185b;   /* bronze / teal / raspberry: clear of the violet, all readable as text */
+  --rank1: #fbd3d0; --rank2: #fde2c4; --rank3: #fbf0b8;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text: 42rem; --stage: 78rem; --bar-h: 3.4rem;
+  --plasma: linear-gradient(90deg, #0d0887, #46039f, #7401a8, #9d189d, #bf3984, #da5a6a, #ee7b51, #fba238, #fcce25);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0c11; --surface: #10131a; --raised: #171b25; --line: #242a38;
+    --fg: #eceef3; --muted: #9098aa; --dim: #5c6376;
+    --ours: #4fd1bd; --ours-soft: #12332f; --base: #8a93a6; --on-accent: #0a0c11; --fc: #f2a33c; --fc-tag: #a35400; --fc-tag-fg: #ffffff; --fc-ink: #f2a33c; --ours-tag: #0b7f71;
+    --ead: #86a8ec; --esa: #b796e6; --etd: #f08a8a;
+    --rank1: #5c2a2c; --rank2: #5a3d1f; --rank3: #4b4319;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0c11; --surface: #10131a; --raised: #171b25; --line: #242a38;
+  --fg: #eceef3; --muted: #9098aa; --dim: #5c6376;
+  --ours: #4fd1bd; --ours-soft: #12332f; --base: #8a93a6; --on-accent: #0a0c11; --fc: #f2a33c; --fc-tag: #a35400; --fc-tag-fg: #ffffff; --fc-ink: #f2a33c; --ours-tag: #0b7f71;
+  --ead: #86a8ec; --esa: #b796e6; --etd: #f08a8a;
+  --rank1: #5c2a2c; --rank2: #5a3d1f; --rank3: #4b4319;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+html, body { overflow-x: clip; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 1rem/1.6 var(--font-body); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+button, input { font: inherit; color: inherit; }
+img, video, canvas { max-width: 100%; }
+:focus-visible { outline: 2px solid var(--ours); outline-offset: 3px; border-radius: 4px; }
+sub { font-size: .72em; }
+.stage, .bar-in, .hero-content, .hero-bottom {
+  width: 100%; max-width: calc(var(--stage) + 32px); margin-inline: auto;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+}
+.eyebrow { font: 500 .74rem/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+h2 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.04; font-weight: 750; font-stretch: 116%; letter-spacing: -.02em; text-wrap: pretty; }
+h3 { font-size: clamp(1.2rem, 2.2vw, 1.5rem); line-height: 1.15; font-weight: 700; font-stretch: 110%; letter-spacing: -.01em; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 1.08rem; max-width: var(--text); }
+.lede b { color: var(--fg); font-weight: 600; }
+section { padding-block: 5.5rem 1rem; border-top: 1px solid var(--line); scroll-margin-top: var(--bar-h); }
+.sec-head { display: grid; gap: 1rem; margin-bottom: 1rem; }
+.sub { margin-top: 2rem; display: grid; gap: .5rem; margin-bottom: 1rem; }
+.sub p { color: var(--muted); max-width: var(--text); }
+.note { font-size: .86rem; color: var(--muted); line-height: 1.5; max-width: 62rem; margin-top: .9rem; }
+
+/* ---------- top bar ---------- */
+.bar { position: sticky; top: 0; z-index: 40; width: 100%; background: color-mix(in oklab, var(--bg) 86%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent); }
+.bar-in { display: flex; align-items: center; justify-content: space-between; gap: 1rem; height: var(--bar-h); }
+.mark { font: 800 1.1rem/1 var(--font-display); font-stretch: 115%; text-decoration: none; white-space: nowrap; }
+.mark i { font-style: normal; color: var(--ours); }
+.bar nav { display: flex; gap: 1.15rem; align-items: center; font-size: .86rem; color: var(--muted); }
+.bar nav a { text-decoration: none; white-space: nowrap; }
+.bar nav a:hover, .bar nav a.on { color: var(--fg); }
+.theme { background: none; border: 1px solid var(--line); border-radius: 999px; padding: .38rem .75rem; font: 500 .74rem/1 var(--font-mono); color: var(--muted); cursor: pointer; }
+.theme:hover { color: var(--fg); border-color: var(--muted); }
+@media (max-width: 1000px) {
+  .bar nav { overflow-x: auto; min-width: 0; padding-right: 1.2rem; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 2rem), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 2rem), transparent); }
+  .bar nav::-webkit-scrollbar { display: none; }
+  .bar nav > * { flex-shrink: 0; }
+}
+
+/* ---------- hero: title, then one clip that runs from simulation (frames given) into forecasting (none given) ---------- */
+.hero { position: relative; padding-block: clamp(1.6rem, 4.5vh, 3.2rem) clamp(1.6rem, 4vh, 2.8rem); }
+.hero-in { width: 100%; max-width: calc(var(--stage) + 32px); margin-inline: auto; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: clamp(1.2rem, 3vh, 2rem); }
+.hero-head { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 1.2rem 3rem; align-items: start; }
+.hero-title { display: grid; gap: .9rem; }
+.hero h1 { font-size: clamp(2.6rem, 5.6vw, 5rem); line-height: .96; font-weight: 800; font-stretch: 118%; letter-spacing: -.035em; }
+.hero h1 i { font-style: normal; color: var(--ours); }
+.hero .paper { font: 500 clamp(1.05rem, 1.6vw, 1.25rem)/1.35 var(--font-body); color: var(--fg); max-width: 30rem; }
+.hero-side { display: grid; gap: .9rem; justify-items: start; }
+.hero .sum { color: var(--muted); font-size: 1rem; line-height: 1.6; max-width: 34rem; }
+.hero .sum b.s { color: var(--ours); font-weight: 600; } .hero .sum b.f { color: var(--fc-ink); font-weight: 600; }
+.people { font-size: .92rem; color: var(--muted); }
+.people b { color: var(--fg); font-weight: 600; }
+.cta { display: flex; flex-wrap: wrap; gap: .55rem; }
+.btn { display: inline-flex; align-items: center; gap: .45rem; padding: .7rem 1.05rem; border-radius: 999px; text-decoration: none;
+  font: 600 .9rem/1 var(--font-body); background: var(--fg); color: var(--bg); border: 1px solid var(--fg); }
+.btn.line { background: transparent; color: var(--fg); border-color: var(--line); }
+.btn.soon { color: var(--muted); cursor: default; }
+.btn small { font: 400 .68rem/1 var(--font-mono); opacity: .75; }
+.btn svg { width: 1.05em; height: 1.05em; flex: none; }
+.round { width: 2rem; height: 2rem; border: 1px solid var(--line); border-radius: 50%; background: color-mix(in oklab, var(--bg) 70%, transparent); color: var(--fg); font: 500 .9rem/1 var(--font-mono); cursor: pointer; display: inline-grid; place-items: center; padding: 0; flex: none; }
+.round:hover { border-color: var(--fg); }
+.pill-btn { background: none; border: 1px solid var(--line); border-radius: 999px; padding: .4rem .8rem; font: 500 .75rem/1 var(--font-mono); color: var(--muted); cursor: pointer; }
+.pill-btn:hover { color: var(--fg); border-color: var(--muted); }
+.hc { margin: 0 auto; display: grid; gap: .5rem; width: min(100%, calc((100svh - 530px) * 2.9)); min-width: min(100%, 640px); }
+.hc-top { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center; justify-content: space-between; }
+.hc-phases { display: flex; flex-wrap: wrap; gap: .4rem; }
+.ph { font: 600 .74rem/1 var(--font-mono); letter-spacing: .04em; padding: .42rem .7rem; border-radius: 999px; border: 1.5px solid var(--line); color: var(--dim); transition: all .25s; }
+.ph.sim.on { border-color: var(--ours); background: color-mix(in oklab, var(--ours) 14%, transparent); color: var(--ours); }
+.ph.fc.on { border-color: var(--fc); background: color-mix(in oklab, var(--fc) 14%, transparent); color: var(--fc-ink); }
+.hc-media { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--plate); }
+.hc-media video { display: block; width: 100%; height: auto; aspect-ratio: 1044 / 360; cursor: pointer; }
+.hc-media::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; margin-left: -1.5px; background: var(--bg); }
+.hc-media .tag { top: 10px; }
+.hc-media .tag.r { left: calc(50% + 10px); }
+.tag.fc { background: var(--fc-tag); color: var(--fc-tag-fg); }
+.hc-tl svg { display: block; width: 100%; height: auto; overflow: visible; }
+.hc-tl text { font-family: var(--font-mono); fill: var(--muted); }
+.hc-tl .lbl { fill: var(--fg); font-weight: 500; }
+.hc-legend { display: none; flex-wrap: wrap; gap: .3rem 1rem; font: 500 .74rem/1.3 var(--font-mono); color: var(--fg); }
+.hc-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: -1px; }
+.hc-legend i.g { background: var(--fg); } .hc-legend i.n { border: 1.5px dashed var(--dim); }
+.hc-cap { font-size: .82rem; color: var(--muted); line-height: 1.5; max-width: 70rem; }
+@media (max-width: 900px) {
+  .hero-head { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .hc-media .tag { top: 6px; }
+}
+@media (max-width: 700px) {
+  .hc-tl .lbl, .hc-tl .kn { display: none; }
+  .hc-legend { display: flex; }
+}
+
+/* ---------- tags ---------- */
+.tag { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: baseline; gap: .4rem; white-space: nowrap;
+  font: 500 .64rem/1 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; padding: .3rem .42rem; border-radius: 4px; color: #fff; background: rgba(17, 20, 27, .78); }
+.tag i { font-style: normal; text-transform: none; letter-spacing: 0; opacity: .82; font-variant-numeric: tabular-nums; }
+.tag.real { background: #11141b; }
+.tag.ours { background: var(--ours-tag); }
+.tag.base { background: rgba(84, 91, 108, .92); }
+.tag.rgb { background: rgba(17, 20, 27, .62); }
+
+/* ---------- segmented buttons ---------- */
+.seg { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.seg .lbl { font: 500 .66rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-right: .15rem; }
+.seg button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: .38rem .62rem; font: 500 .72rem/1 var(--font-mono); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--fg); border-color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.seg button em { font-style: normal; opacity: .6; margin-left: .3rem; }
+
+/* ---------- scrollytelling ---------- */
+.scrolly { display: grid; grid-template-columns: minmax(15rem, 22rem) minmax(0, 1fr); column-gap: clamp(1.5rem, 3vw, 3rem); }
+.steps { grid-column: 1; grid-row: 1; padding-block: 18vh 40vh; }
+.step { min-height: 72vh; display: flex; align-items: center; }
+.step:first-child { min-height: 52vh; }
+.step .card { border-left: 2px solid var(--line); padding: .3rem 0 .3rem 1.1rem; opacity: .32; transition: opacity .35s, border-color .35s; display: grid; gap: .55rem; }
+.step.on .card { opacity: 1; border-left-color: var(--ours); }
+.step .n { font: 500 .7rem/1 var(--font-mono); letter-spacing: .1em; color: var(--dim); text-transform: uppercase; }
+.step.on .n { color: var(--ours); }
+.step p { color: var(--muted); font-size: .98rem; line-height: 1.6; }
+.step p b { color: var(--fg); font-weight: 600; }
+.step .ctrl { display: grid; gap: .45rem; margin-top: .3rem; }
+.step label.sl { display: grid; grid-template-columns: 2.6em 1fr auto; gap: .6rem; align-items: center; font: 500 .74rem/1 var(--font-mono); color: var(--muted); }
+.step label.sl input { width: 100%; accent-color: var(--ours); }
+.step label.sl output { color: var(--fg); min-width: 4.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.sticky { grid-column: 2; grid-row: 1; align-self: start; position: sticky; top: calc(var(--bar-h) + .8rem);
+  height: calc(100vh - var(--bar-h) - 1.6rem); height: calc(100svh - var(--bar-h) - 1.6rem); display: flex; flex-direction: column; gap: .55rem; min-width: 0; z-index: 3; }
+.media { position: relative; flex: 1 1 auto; min-height: 0; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+.media canvas.view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
+.tag-layer { position: absolute; inset: 0; pointer-events: none; }
+.tag-layer .tag { left: 0; top: 0; transition: opacity .2s; will-change: transform; }
+.src-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; z-index: 0; }
+.media canvas.view { z-index: 1; background: var(--surface); } .tag-layer { z-index: 2; }
+.pfoot { display: flex; flex-wrap: wrap; gap: .45rem .9rem; align-items: center; }
+.pfoot .scenes { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 1.5rem), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 1.5rem), transparent); padding-right: 1.5rem; }
+.pfoot .scenes::-webkit-scrollbar { display: none; }
+.pfoot .row { display: flex; flex-wrap: wrap; gap: .45rem .9rem; align-items: center; width: 100%; }
+.readout { font: 500 .74rem/1.3 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; text-align: right; }
+.readout b { color: var(--fg); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: center; font-size: .78rem; color: var(--muted); }
+.legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: -1px; margin-right: .3rem; }
+.legend .ramp { display: inline-block; width: 100px; height: 9px; border-radius: 2px; background: var(--plasma); vertical-align: 0; margin: 0 .35rem; }
+.legend .white { background: #fff; border: 1px solid var(--line); }
+.horizon { position: relative; height: 24px; width: 100%; }
+.horizon .h-bar { position: absolute; left: 0; right: 0; top: 3px; height: 7px; border-radius: 2px; background: var(--plasma); }
+.horizon .h-tick { position: absolute; top: 0; width: 1.5px; height: 13px; background: var(--fg); }
+.horizon .h-now { position: absolute; top: 10px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 7px solid var(--fg); margin-left: -5px; }
+.horizon .h-lab { position: absolute; top: 14px; font: 400 .62rem/1 var(--font-mono); color: var(--dim); transform: translateX(-50%); white-space: nowrap; }
+.split { display: flex; gap: .55rem; flex: 1 1 auto; min-height: 0; }
+.split .media { flex: 1.25 1 0; }
+.trace-card { flex: 1 1 0; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: .7rem .8rem; display: flex; flex-direction: column; min-height: 0; }
+.trace-card h4 { margin: 0; font: 700 .95rem/1.2 var(--font-display); font-stretch: 110%; }
+.trace-card .sub-t { font-size: .74rem; color: var(--muted); line-height: 1.35; }
+.trace { flex: 1 1 auto; min-height: 0; }
+.trace svg { width: 100%; height: 100%; display: block; }
+.trace text { font-family: var(--font-mono); fill: var(--muted); }
+.trace .nm { fill: var(--fg); font-weight: 500; }
+.trace .ax { stroke: var(--muted); stroke-width: 1; }
+.trace .gl { stroke: var(--line); stroke-width: 1; }
+.trace .ref { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 4 4; }
+.trace .ln { fill: none; stroke: var(--fg); stroke-width: 2; stroke-linejoin: round; }
+.trace .ln.ours { stroke: var(--ours); }
+.trace .dot { fill: var(--fg); stroke: var(--surface); stroke-width: 2; }
+.trace .dot.ours { fill: var(--ours); }
+.trace .br { stroke: var(--fg); stroke-width: 1.5; fill: none; }
+@media (max-width: 900px) {
+  .scrolly { grid-template-columns: minmax(0, 1fr); }
+  .sticky { grid-column: 1; grid-row: 1; top: var(--bar-h); height: 56vh; height: 56svh; background: var(--bg); padding-block: .5rem; margin-inline: -16px; padding-inline: 16px; box-shadow: 0 10px 14px -12px rgba(0, 0, 0, .25); }
+  .steps { grid-column: 1; grid-row: 2; padding-block: 4vh 30vh; }
+  .step, .step:first-child { min-height: 62vh; align-items: flex-start; }
+  .step .card { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 10px; padding: .9rem 1rem; opacity: .55; }
+  .step.on .card { border-left-color: var(--ours); }
+  .tag { font-size: .52rem; padding: .22rem .3rem; gap: .25rem; }
+  .tag i { display: none; }
+  .split { flex-direction: column; }
+  .trace-card { flex: .9 1 0; padding: .4rem .5rem; }
+  .trace-card .sub-t { display: none; }
+  .readout { margin-left: 0; text-align: left; }
+  .pfoot .legend { display: none; }
+}
+
+/* ---------- how it works: the O²LaF-style pipeline card and the stage inspector ---------- */
+.c-ead-t { color: var(--ead); font-weight: 600; } .c-esa-t { color: var(--esa); font-weight: 600; } .c-etd-t { color: var(--etd); font-weight: 600; }
+.lam { margin-top: .6rem; }
+.lam-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: .85rem 1rem .8rem; display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.lam-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .8rem; }
+.lam-steps { display: flex; flex-wrap: wrap; gap: .28rem; }
+.lam-steps button { display: inline-flex; align-items: center; gap: .32rem; border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: .36rem .66rem; font: 500 .72rem/1 var(--font-mono); color: var(--muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.lam-steps button i { font-style: normal; opacity: .65; }
+.lam-steps button:hover { color: var(--fg); border-color: var(--muted); }
+.lam-steps button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.lam-play { flex: none; width: 1.9rem; height: 1.9rem; display: inline-grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--muted); font: 600 .7rem/1 var(--font-mono); cursor: pointer; }
+.lam-play:hover { color: var(--fg); border-color: var(--fg); }
+.lam-say { margin: 0; text-align: center; font: 500 .84rem/1.45 var(--font-body); color: var(--muted); min-height: 2.9em; max-width: 60rem; margin-inline: auto; }
+.lam-say b { color: var(--fg); font-weight: 600; }
+.lam-scroll { overflow-x: auto; }
+.lam-wrap { position: relative; min-width: 760px; }
+.lam-ov { position: absolute; display: block; pointer-events: none; image-rendering: auto; }
+.lam-svg { width: 100%; height: auto; display: block; user-select: none; }
+.lam-svg text { font-family: var(--font-body); fill: var(--fg); }
+.lam-svg .lm-mono { font-family: var(--font-mono); }
+.lam-svg .lm-muted { fill: var(--muted); }
+.lam-svg .lm-dim { fill: var(--dim); }
+.lam-svg .lm-wire { fill: none; stroke: var(--line); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; transition: stroke .25s; }
+.lam-svg .lm-wire.dash { stroke-dasharray: 4 4; }
+.lam-svg .lm-wire.on { stroke: var(--c); stroke-width: 2.2; }
+.lam-svg .lm-wire.flow { stroke-dasharray: 5 4; animation: lamFlow 1.1s linear infinite; }
+@keyframes lamFlow { from { stroke-dashoffset: 18; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .lam-svg .lm-wire.flow { animation: none; } }
+.lam-svg .lm-box { fill: var(--bg); stroke: color-mix(in oklab, var(--c) 40%, var(--line)); stroke-width: 1.6; transition: stroke .25s, fill .25s; }
+.lam-svg .lm-box.on { stroke: var(--c); stroke-width: 2.3; fill: color-mix(in oklab, var(--c) 9%, var(--surface)); }
+.lam-svg .lm-frame { fill: none; stroke: var(--line); stroke-width: 1.8; transition: stroke .25s; }
+.lam-svg .lm-frame.on { stroke: var(--c); stroke-width: 2.4; }
+.lam-svg .lm-tagbg { fill: rgba(10, 12, 17, .74); }
+.lam-svg .lm-tag { fill: #fff; font: 600 9.5px/1 var(--font-mono); }
+.lam-svg .lm-railbg { fill: var(--surface); }
+.lam-svg .lm-chip { fill: var(--surface); stroke: color-mix(in oklab, var(--c) 45%, var(--line)); stroke-width: 1.1; transition: fill .25s, stroke .25s; }
+.lam-svg .lm-chip.on { fill: var(--c); stroke: var(--c); }
+.lam-svg .lm-chip-t { font: 600 9px/1 var(--font-mono); fill: var(--c); }
+.lam-svg .lm-chip-t.on { fill: var(--on-accent); }
+.lam-svg .lm-pulse { opacity: 0; transition: opacity .2s; }
+.lam-svg .lm-pulse.show { opacity: 1; }
+.lam-svg image { transition: opacity .3s; }
+.subblock { margin-top: 3.4rem; display: grid; gap: .7rem; margin-bottom: 1.2rem; }
+.side { border: 1px solid var(--line); border-top: 3px solid var(--c); border-radius: 12px; padding: 1.05rem 1.1rem 1rem; display: grid; gap: .85rem; align-content: start; background: var(--surface); min-width: 0; transition: border-color .25s; }
+.side .slider { display: grid; gap: .4rem; }
+.side .slider input { width: 100%; accent-color: var(--c); }
+.side .ticks { display: flex; justify-content: space-between; font: 400 .68rem/1 var(--font-mono); color: var(--dim); }
+.side .note { font-size: .88rem; color: var(--muted); line-height: 1.5; margin: 0; min-height: 3em; }
+.side .note b { color: var(--fg); font-weight: 600; }
+.insp-top { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; }
+.insp-v { font: 500 .85rem/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--c); }
+.insp-frame { position: relative; width: 100%; max-width: 880px; margin-inline: auto; aspect-ratio: 896 / 608; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; touch-action: pan-y; }
+.insp-frame canvas, .insp-frame img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.insp-frame.drag { cursor: grab; }
+.insp-hint { position: absolute; right: .5rem; bottom: .4rem; font: 500 .68rem/1 var(--font-mono); color: #8a91a1; pointer-events: none; }
+.insp .slider, .insp .note { max-width: 880px; width: 100%; margin-inline: auto; }
+.insp-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .9rem; }
+.insp-pair figure { margin: 0; display: grid; gap: .35rem; min-width: 0; }
+.insp-pair figcaption { font-size: .8rem; color: var(--muted); line-height: 1.35; }
+.insp-pair figcaption b { color: var(--fg); font-weight: 600; }
+.insp-pair .insp-frame { max-width: none; }
+.insp-pair .insp-frame img { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: var(--zx, 50%) var(--zy, 50%); transition: transform .35s ease; }
+.insp-pair.zoomed .insp-frame img { transform: scale(2.3); image-rendering: pixelated; }
+.insp-etd { display: flex; justify-content: center; }
+@media (max-width: 760px) { .insp-pair { grid-template-columns: minmax(0, 1fr); } }
+.fine { font-size: .78rem; color: var(--dim); line-height: 1.45; margin-top: .9rem; max-width: 62rem; }
+
+/* ---------- stats, tables, chart ---------- */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin-top: 1rem; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: .75rem .85rem; display: grid; gap: .2rem; }
+.stat .v { font: 800 clamp(1.4rem, 3vw, 2rem)/1 var(--font-display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+.stat .k { font: 500 .7rem/1.25 var(--font-mono); color: var(--muted); }
+.stat.ours { border-color: var(--ours); } .stat.ours .v { color: var(--ours); }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; min-width: 0; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+.table-scroll { overflow-x: auto; }
+table.res { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+table.res th, table.res td { padding: .5rem .75rem; text-align: right; white-space: nowrap; }
+table.res th:first-child, table.res td:first-child { text-align: left; }
+table.res thead th { font: 500 .7rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); }
+table.res tbody tr + tr td { border-top: 1px solid var(--line); }
+table.res tr.sep td { border-top: 2px solid var(--muted) !important; }
+table.res tr.ours td:first-child { font-weight: 600; color: var(--ours); }
+table.res tr.group td { font: 500 .7rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); padding-top: .9rem; padding-bottom: .25rem; }
+table.res td.r1 { background: var(--rank1); font-weight: 700; }
+table.res td.r2 { background: var(--rank2); }
+table.res td.r3 { background: var(--rank3); }
+table.res .sd { font-size: .74em; color: var(--muted); margin-left: 2px; }
+.barcell { display: inline-flex; align-items: center; gap: .6rem; justify-content: flex-end; }
+.barcell .track { width: 84px; height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.barcell .fill { display: block; height: 100%; background: var(--base); border-radius: 3px; }
+tr.ours .barcell .fill { background: var(--ours); }
+.rank-key { display: inline-flex; gap: .35rem; align-items: center; margin-left: .3rem; }
+.rank-key i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: -1px; }
+.chart-scroll { overflow-x: auto; }
+.chart-svg text { font-family: var(--font-mono); }
+.chart-svg .grid { stroke: var(--line); }
+.chart-svg .frame { fill: none; stroke: var(--line); }
+.chart-svg .tick { font-size: 11px; fill: var(--muted); }
+.chart-svg .axis { font-size: 12px; fill: var(--fg); font-family: var(--font-body); }
+.chart-svg .hint { font-size: 11px; fill: var(--dim); }
+.chart-svg .dot-base { fill: var(--base); stroke: var(--surface); stroke-width: 2; }
+.chart-svg .dot-ours { fill: var(--ours); stroke: var(--surface); stroke-width: 2; }
+.chart-svg .lab-base { font-size: 11.5px; fill: var(--muted); }
+.chart-svg .lab-ours { font-size: 12px; font-weight: 500; fill: var(--ours); }
+.chart-svg .hit { fill: transparent; }
+.tip { position: fixed; z-index: 60; pointer-events: none; background: var(--fg); color: var(--bg); font: 500 .74rem/1.45 var(--font-mono); padding: .5rem .65rem; border-radius: 6px; max-width: 18rem; white-space: pre-line; opacity: 0; transition: opacity .12s; }
+.tip.on { opacity: 1; }
+.formula { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.4rem 1rem; text-align: center; overflow-x: auto; }
+.formula math { font-size: 1.15em; }
+.formula math + math { margin-top: .6rem; font-size: .95em; }
+.components { display: grid; grid-template-columns: max-content minmax(0, 1fr); margin: 1.2rem 0 0; border-top: 1px solid var(--line); max-width: 62rem; }
+.components dt, .components dd { margin: 0; padding: .7rem .4rem; border-bottom: 1px solid var(--line); }
+.components dt { font: 500 .9rem/1.4 var(--font-mono); padding-right: 1.6rem; white-space: nowrap; }
+.components dd { color: var(--muted); font-size: .93rem; line-height: 1.55; }
+.callout { margin-top: 1.4rem; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--ours); border-radius: 10px; padding: 1rem 1.1rem; color: var(--muted); max-width: 62rem; line-height: 1.6; }
+.callout b { color: var(--fg); }
+.bibtex { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.bibtex pre { margin: 0; padding: 1.1rem 1.2rem; overflow-x: auto; font: 400 .84rem/1.6 var(--font-mono); }
+.bibtex .pill-btn { position: absolute; top: .7rem; right: .7rem; background: var(--surface); }
+footer { border-top: 1px solid var(--line); padding-block: 2rem 3rem; color: var(--dim); font-size: .82rem; margin-top: 4rem; }
+footer .stage { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .6rem; }
+footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-in">
+    <a class="mark" href="#top">Event<i>Diffusion</i></a>
+    <nav aria-label="Sections" id="nav">
+      <a href="#how">How it works</a>
+      <a href="#between">Between frames</a>
+      <a href="#sparse">Sparse RGB</a>
+      <a href="#timing">Timing</a>
+      <a href="#forecast">Forecasting</a>
+      <a href="#downstream">Downstream</a>
+      <a href="#results">Results</a>
+      <a href="#cefs">CEFS</a>
+      <a href="#cite">Cite</a>
+      <button class="theme" id="theme" type="button" aria-label="Switch between day and night themes">Night</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ================= HERO: one clip from simulation into forecasting ================= -->
+<div class="hero" id="top">
+  <div class="hero-in">
+    <div class="hero-head">
+      <div class="hero-title">
+        <h1>Event<i>Diffusion</i></h1>
+        <p class="paper">Learning Native Event Stream Distribution from Videos</p>
+      </div>
+      <div class="hero-side">
+        <p class="sum">EventDiffusion samples individual events, each with its pixel, polarity and continuous timestamp, from a distribution learned on real event-camera recordings. It generates the events <b class="s">between RGB frames</b>, and predicts <b class="f">future events</b>.</p>
+        <p class="people"><b>Karthik Sundar Senthilkumar, Christopher Thirgood, Simon Hadfield</b></p>
+        <div class="cta">
+          <a class="btn line soon" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>Paper <small>soon</small></a>
+          <a class="btn line soon" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code <small>soon</small></a>
+          <a class="btn" href="#how"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>See how it works</a>
+        </div>
+      </div>
+    </div>
+    <figure class="hc" id="hc">
+      <div class="hc-top">
+        <div class="hc-phases"><span class="ph sim on" id="hc-sim">① Between frames · RGB frames given</span><span class="ph fc" id="hc-fc">② Forecasting · no frames given</span></div>
+        <span class="readout" id="hc-read"></span>
+      </div>
+      <div class="hc-media">
+        <video id="hc-video" muted loop playsinline preload="auto" data-poster="assets/hero/hero.jpg" aria-label="BS-ERGB paprika: the RGB frame on the left, EventDiffusion's events on the right; frames 45 to 50 are given, after frame 50 none are and the events are forecast. Click to pause."></video>
+        <span class="tag rgb" id="hc-tl-tag"></span>
+        <span class="tag ours r" id="hc-tr-tag"></span>
+      </div>
+      <div class="hc-tl" id="hc-tl"></div>
+      <div class="hc-legend"><span><i class="g"></i>RGB frames given → events generated between them</span><span><i class="n"></i>no frames given → events forecast</span></div>
+      <figcaption class="hc-cap" id="hc-cap"></figcaption>
+    </figure>
+  </div>
+</div>
+
+<main class="stage">
+
+<!-- ================= HOW IT WORKS (O²LaF-style pipeline card + stage inspector), the whole frame ================= -->
+<section id="how">
+  <div class="sec-head">
+    <span class="eyebrow">How it works</span>
+    <h2>How many, where, and when.</h2>
+    <p class="lede"> <span class="c-ead-t">EAD - Event Activity Diffusion</span> samples how many events fire in each cell and slice, <span class="c-esa-t">ESA - Event Spatial Allocation</span> places them on pixels, and <span class="c-etd-t">ETD - Event Timing Diffusion</span> gives each one a continuous timestamp.</p>
+  </div>
+
+  <div class="lam" id="hw" aria-label="How EventDiffusion generates one interval">
+    <div class="lam-card">
+      <div class="lam-top">
+        <div class="lam-steps" role="group" aria-label="Pipeline step">
+          <button type="button" data-s="0" aria-pressed="true"><i>01</i>Inputs</button>
+          <button type="button" data-s="1" aria-pressed="false"><i>02</i>EAD · how many</button>
+          <button type="button" data-s="2" aria-pressed="false"><i>03</i>ESA · where</button>
+          <button type="button" data-s="3" aria-pressed="false"><i>04</i>ETD · when</button>
+          <button type="button" data-s="4" aria-pressed="false"><i>05</i>Event stream</button>
+        </div>
+        <button type="button" class="lam-play" id="hw-play" aria-label="Pause diagram animation" aria-pressed="false">❚❚</button>
+      </div>
+      <div class="lam-scroll">
+        <div class="lam-wrap">
+          <svg class="lam-svg" id="hw-svg" viewBox="0 0 960 300" role="img" aria-label="EventDiffusion's pipeline for one frame interval: frames I_k and I_k+1 and the past events condition EAD, which samples event counts per 2-pixel cell and slice; ESA places them on pixels; ETD diffuses each event's timestamp; the output events become the past for the next interval.">
+            <defs>
+              <marker id="hm-m-dim" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M1,1.5 L8.5,5 L1,8.5 z" style="fill:var(--line)"/></marker>
+              <marker id="hm-m-in" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M1,1.5 L8.5,5 L1,8.5 z" style="fill:var(--fg)"/></marker>
+              <marker id="hm-m-ead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M1,1.5 L8.5,5 L1,8.5 z" style="fill:var(--ead)"/></marker>
+              <marker id="hm-m-esa" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M1,1.5 L8.5,5 L1,8.5 z" style="fill:var(--esa)"/></marker>
+              <marker id="hm-m-etd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M1,1.5 L8.5,5 L1,8.5 z" style="fill:var(--etd)"/></marker>
+              <marker id="hm-m-out" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M1,1.5 L8.5,5 L1,8.5 z" style="fill:var(--ours)"/></marker>
+            </defs>
+            <path id="hm-w-rgb1" class="lm-wire" d="M 64 30 L 64 18 Q 64 12 70 12 L 229 12 Q 235 12 235 18 L 235 68" marker-end="url(#hm-m-dim)"/>
+            <path id="hm-w-rgb2" class="lm-wire" d="M 235 12 L 444 12 Q 450 12 450 18 L 450 68" marker-end="url(#hm-m-dim)"/>
+            <rect class="lm-railbg" x="282" y="4" width="120" height="16" rx="4"/>
+            <text x="342" y="15.5" text-anchor="middle" class="lm-mono lm-muted" font-size="9.5">RGB features</text>
+            <path id="hm-w-a" class="lm-wire" d="M 112 62 C 124 62, 122 118, 136 118" marker-end="url(#hm-m-dim)"/>
+            <path id="hm-w-b" class="lm-wire" d="M 112 142 C 124 142, 122 148, 136 148" marker-end="url(#hm-m-dim)"/>
+            <path id="hm-w-p" class="lm-wire" d="M 112 222 C 124 222, 122 178, 136 178" marker-end="url(#hm-m-dim)"/>
+            <path id="hm-w-ead" class="lm-wire" d="M 330 150 L 356 150" marker-end="url(#hm-m-dim)"/>
+            <path id="hm-w-esa" class="lm-wire" d="M 540 150 L 566 150" marker-end="url(#hm-m-dim)"/>
+            <path id="hm-w-etd" class="lm-wire" d="M 770 150 L 796 150" marker-end="url(#hm-m-dim)"/>
+            <path id="hm-w-fb" class="lm-wire dash" d="M 872 200 L 872 282 Q 872 290 864 290 L 72 290 Q 64 290 64 282 L 64 258" marker-end="url(#hm-m-dim)"/>
+            <rect class="lm-railbg" x="318" y="282" width="324" height="16" rx="4"/>
+            <text x="480" y="293.5" text-anchor="middle" class="lm-mono lm-muted" font-size="9.5">becomes the past for the next interval</text>
+
+            <image data-href="assets/method/frame_a.jpg" x="16" y="30" width="96" height="65" preserveAspectRatio="xMidYMid slice"/>
+            <rect id="hm-fa" class="lm-frame" x="16" y="30" width="96" height="65" rx="3" style="--c:var(--fg)"/>
+            <rect class="lm-tagbg" x="19" y="33" width="20" height="14" rx="3"/><text class="lm-tag" x="29" y="43.5" text-anchor="middle">Iₖ</text>
+            <image data-href="assets/method/frame_b.jpg" x="16" y="110" width="96" height="65" preserveAspectRatio="xMidYMid slice"/>
+            <rect id="hm-fb" class="lm-frame" x="16" y="110" width="96" height="65" rx="3" style="--c:var(--fg)"/>
+            <rect class="lm-tagbg" x="19" y="113" width="32" height="14" rx="3"/><text class="lm-tag" x="35" y="123.5" text-anchor="middle">Iₖ₊₁</text>
+            <rect x="16" y="190" width="96" height="65" fill="#fff"/>
+            <image data-href="assets/method/past.webp" x="16" y="190" width="96" height="65" preserveAspectRatio="xMidYMid slice"/>
+            <rect id="hm-fp" class="lm-frame" x="16" y="190" width="96" height="65" rx="3" style="--c:var(--fg)"/>
+            <rect class="lm-tagbg" x="19" y="193" width="32" height="14" rx="3"/><text class="lm-tag" x="35" y="203.5" text-anchor="middle">past</text>
+
+            <rect id="hm-ead" class="lm-box" x="140" y="70" width="190" height="160" rx="11" style="--c:var(--ead)"/>
+            <text x="150" y="89" class="lm-mono" font-size="12.5" font-weight="700">EAD <tspan font-size="9" font-weight="500" class="lm-muted">· how many</tspan></text>
+            <rect id="hm-ead-chip" class="lm-chip" x="262" y="77" width="62" height="18" rx="5" style="--c:var(--ead)"/>
+            <text id="hm-ead-chip-t" class="lm-chip-t" x="293" y="89" text-anchor="middle" style="--c:var(--ead)">ξ = 1.00</text>
+            <rect x="150" y="100" width="170" height="116" fill="#fff" stroke="var(--line)"/>
+            <text x="235" y="225" text-anchor="middle" class="lm-mono lm-dim" font-size="8">counts per 2-px cell · one slice</text>
+
+            <rect id="hm-esa" class="lm-box" x="360" y="70" width="180" height="160" rx="11" style="--c:var(--esa)"/>
+            <text x="370" y="89" class="lm-mono" font-size="12.5" font-weight="700">ESA <tspan font-size="9" font-weight="500" class="lm-muted">· where</tspan></text>
+            <rect x="368" y="100" width="164" height="111" fill="#fff" stroke="var(--line)"/>
+            <image id="hm-esa-img" data-href="assets/method/esa.webp" x="368" y="100" width="164" height="111" preserveAspectRatio="xMidYMid slice" opacity="0.12"/>
+            <text x="450" y="224" text-anchor="middle" class="lm-mono lm-dim" font-size="8">events on pixels · totals kept</text>
+
+            <rect id="hm-etd" class="lm-box" x="570" y="70" width="200" height="160" rx="11" style="--c:var(--etd)"/>
+            <text x="580" y="89" class="lm-mono" font-size="12.5" font-weight="700">ETD <tspan font-size="9" font-weight="500" class="lm-muted">· when</tspan></text>
+            <rect id="hm-etd-chip" class="lm-chip" x="670" y="77" width="92" height="18" rx="5" style="--c:var(--etd)"/>
+            <text id="hm-etd-chip-t" class="lm-chip-t" x="716" y="89" text-anchor="middle" style="--c:var(--etd)">hold p = 0.00</text>
+            <rect x="578" y="99" width="184" height="116" rx="3" fill="#fff" stroke="var(--line)"/>
+            <image id="hm-etd-0" data-href="assets/method/etd_mini_0.webp" x="578" y="99" width="184" height="116" preserveAspectRatio="xMidYMid slice" opacity="1"/>
+            <image id="hm-etd-1" data-href="assets/method/etd_mini_1.webp" x="578" y="99" width="184" height="116" preserveAspectRatio="xMidYMid slice" opacity="0"/>
+            <image id="hm-etd-2" data-href="assets/method/etd_mini_2.webp" x="578" y="99" width="184" height="116" preserveAspectRatio="xMidYMid slice" opacity="0"/>
+            <image id="hm-etd-3" data-href="assets/method/etd_mini_3.webp" x="578" y="99" width="184" height="116" preserveAspectRatio="xMidYMid slice" opacity="0"/>
+            <image id="hm-etd-4" data-href="assets/method/etd_mini_4.webp" x="578" y="99" width="184" height="116" preserveAspectRatio="xMidYMid slice" opacity="0"/>
+            <text x="670" y="225" text-anchor="middle" class="lm-mono lm-dim" font-size="8">events in 500 µs, near the ball</text>
+
+            <text x="872" y="93" text-anchor="middle" class="lm-mono lm-muted" font-size="9">events (x, y, t, p)</text>
+            <rect x="800" y="101" width="144" height="98" fill="#fff"/>
+            <image id="hm-img-o" data-href="assets/method/output.webp" x="800" y="101" width="144" height="98" preserveAspectRatio="xMidYMid slice" opacity="0.12"/>
+            <rect id="hm-fo" class="lm-frame" x="800" y="101" width="144" height="98" rx="3" style="--c:var(--ours)"/>
+
+            <circle id="hm-p0" class="lm-pulse" r="4"/>
+            <circle id="hm-p1" class="lm-pulse" r="4"/>
+            <circle id="hm-p2" class="lm-pulse" r="4"/>
+          </svg>
+          <canvas class="lam-ov" id="hm-ead-cv" style="left:15.625%;top:33.333%;width:17.708%;height:38.667%"></canvas>
+        </div>
+      </div>
+      <p class="lam-say" id="hw-say"></p>
+    </div>
+  </div>
+
+  <div class="subblock">
+    <h3>A Closer Look</h3>
+  </div>
+  <div class="side insp" id="insp">
+    <div class="insp-top">
+      <div class="seg" id="insp-tabs" role="group" aria-label="Stage"></div>
+      <span class="insp-v" id="insp-v"></span>
+    </div>
+    <div class="insp-frame" id="insp-frame">
+      <canvas id="insp-cv"></canvas>
+      <img id="insp-img" alt="" hidden>
+      <span class="insp-hint" id="insp-hint" hidden></span>
+    </div>
+    <div class="insp-pair" id="insp-pair" hidden>
+      <figure><figcaption><b>Times known only to their slice</b> · uniform within each 5 ms slice, ETD's starting point</figcaption><div class="insp-frame"><img id="etd-u" alt="The interval's events in the chosen bin, with times uniform within each slice"></div></figure>
+      <figure><figcaption><b class="c-etd-t">ETD's continuous times</b> · as generated</figcaption><div class="insp-frame"><img id="etd-g" alt="The same events in the chosen bin, with the generated times"></div></figure>
+    </div>
+    <div class="insp-etd" id="insp-etd" hidden><div class="seg" id="insp-etd-zoom"></div></div>
+    <div class="slider" id="insp-sl">
+      <input type="range" id="insp-in" min="0" max="1" step="0.005" value="0.5" aria-label="Stage control">
+      <div class="ticks" id="insp-ticks"></div>
+    </div>
+    <p class="note" id="insp-note"></p>
+  </div>
+</section>
+
+<!-- ================= NATIVE ================= -->
+<section id="between">
+  <div class="sec-head">
+    <span class="eyebrow">Simulation · native RGB frames</span>
+    <h2>Events between the given RGB frames</h2>
+  </div>
+  <div class="scrolly" id="sc-native">
+    <div class="sticky"><div class="media"></div><div class="pfoot"></div></div>
+    <div class="steps">
+      <div class="step"><div class="card"><span class="n">01</span><h3>Two frames in</h3><p>EventDiffusion-FT receives consecutive RGB frames and its own earlier events</p></div></div>
+      <div class="step"><div class="card"><span class="n">02</span><h3>The real recording</h3><p>The event camera's own recording of the same moments</p></div></div>
+      <div class="step"><div class="card"><span class="n">03</span><h3>Generated from the frames</h3><p><b>EventDiffusion-FT's</b> stream next to it.</p></div></div>
+      <div class="step"><div class="card"><span class="n">04</span><h3>Against simulators</h3><p>ESIM and DVS-Voltmeter run on 10× Super SloMo frames with the paper's calibrated parameters. V2CE is fine-tuned per dataset.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= GAP-5x ================= -->
+<section id="sparse">
+  <div class="sec-head">
+    <span class="eyebrow">Simulation · every fifth frame</span>
+    <h2>What happens when you give every fifth RGB frame?</h2>
+  </div>
+  <div class="scrolly" id="sc-sparse">
+    <div class="sticky"><div class="media"></div><div class="pfoot"></div></div>
+    <div class="steps">
+      <div class="step"><div class="card"><span class="n">01</span><h3>One frame in five</h3><p>Only every fifth RGB frame is given. The RGB tile holds the <b>last given frame</b> while the events run on.</p></div></div>
+      <div class="step"><div class="card"><span class="n">02</span><h3>Filling the gap</h3><p>EventDiffusion-FT generates all five frame intervals between given frames.</p></div></div>
+      <div class="step"><div class="card"><span class="n">03</span><h3>All methods</h3><p>Averaged over DSEC, EDS, BS-ERGB and CEAR, EventDiffusion-FT keeps a CEFS of <b>0.425</b> with every fifth frame, against <b>0.289</b> for the best baselines.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TIMING ================= -->
+<section id="timing">
+  <div class="sec-head">
+    <span class="eyebrow">Timing fidelity · 1&nbsp;ms frames</span>
+    <h2>Continuous timestamps, not frame-batched ones.</h2>
+  </div>
+  <div class="scrolly" id="sc-timing">
+    <div class="sticky">
+      <div class="split">
+        <div class="media"></div>
+        <div class="trace-card">
+          <h4>Events in each 1&nbsp;ms frame</h4>
+          <div class="sub-t">Pixels with events, as % of the method's average over the clip; the last 60&nbsp;ms, the dot is the frame on screen.</div>
+          <div class="trace" id="trace" role="img" aria-label="Live traces of how many pixels have events in each 1 ms frame"></div>
+        </div>
+      </div>
+      <div class="pfoot"></div>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="card"><span class="n">01</span><h3>Real events at 1&nbsp;ms</h3><p>HS-ERGB's spinning umbrella, cut into 1&nbsp;ms event frames and played <b>50× slower</b>. The real recording fills each frame about equally.</p></div></div>
+      <div class="step"><div class="card"><span class="n">02</span><h3>Frame-batched simulators</h3><p>ESIM and DVS-Voltmeter batch their event times to the RGB frames, so their 1&nbsp;ms frames fill and empty every <b>6.1&nbsp;ms</b>, the RGB frame interval.</p></div></div>
+      <div class="step"><div class="card"><span class="n">03</span><h3>Continuous timestamps</h3><p>EventDiffusion samples a continuous time for every event, so its frames stay as steady as the real ones at any frame rate.</p></div></div>
+      <div class="step"><div class="card"><span class="n">04</span><h3>Side by side</h3><p>Frame-to-frame variation of the activity <span id="umb-sd-text"></span>.</p></div></div>
+    </div>
+  </div>
+  <!-- <div class="stats" id="umb-stats"></div> -->
+  <div class="sub">
+    <h3>Timing against the paired recording</h3>
+    <p>Real sensors quantize and batch timestamps too, so each score is the distance to the camera's</p>
+  </div>
+  <div class="card">
+    <div class="table-scroll">
+      <table class="res">
+        <thead><tr><th>Method</th><th title="Share of consecutive-event gaps at most 1 ns, 0.1 µs and 1 µs; absolute difference to the recording">Same-ts |Δ<sub>GT</sub>| ↓</th><th title="Share of gaps at most 10 µs; absolute difference to the recording">ISI-spike |Δ<sub>GT</sub>| ↓</th><th title="|log ratio| of Fano factors over 10, 50 and 200 µs bins">Fano |log ratio| ↓</th></tr></thead>
+        <tbody>
+          <tr><td>ESIM</td><td>0.094</td><td>0.014</td><td>1.19</td></tr>
+          <tr><td>v2e</td><td>0.297</td><td class="r3">0.009</td><td>8.26</td></tr>
+          <tr><td>DVS-Voltmeter</td><td>0.089</td><td>0.012</td><td class="r3">1.18</td></tr>
+          <tr><td>V2CE</td><td class="r3">0.078</td><td>0.012</td><td>2.84</td></tr>
+          <tr><td>FracEvent</td><td>0.232</td><td>0.017</td><td>1.29</td></tr>
+          <tr class="ours sep"><td>EventDiffusion-G</td><td class="r1">0.0519<span class="sd">±0.0005</span></td><td class="r1">0.00558<span class="sd">±0.00025</span></td><td class="r2">0.904<span class="sd">±0.011</span></td></tr>
+          <tr class="ours"><td>EventDiffusion-FT</td><td class="r2">0.0545<span class="sd">±0.0002</span></td><td class="r2">0.00854<span class="sd">±0.00042</span></td><td class="r1">0.840<span class="sd">±0.003</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Native RGB, mean over four datasets. Same-ts: share of consecutive-event gaps at most 1&nbsp;ns, 0.1&nbsp;µs and 1&nbsp;µs. ISI-spike: share of gaps at most 10&nbsp;µs. Fano: burstiness over 10, 50 and 200&nbsp;µs bins. <span class="rank-key"><i style="background:var(--rank1)"></i>first <i style="background:var(--rank2)"></i>second <i style="background:var(--rank3)"></i>third</span></p>
+  </div>
+</section>
+
+<!-- ================= FORECASTING ================= -->
+<section id="forecast">
+  <div class="sec-head">
+    <span class="eyebrow">Forecasting</span>
+    <h2>Predicting the future events.</h2>
+  </div>
+  <div class="scrolly" id="sc-forecast">
+    <div class="sticky"><div class="media"></div><div class="pfoot"></div></div>
+    <div class="steps">
+      <div class="step"><div class="card"><span class="n">01</span><h3>The input</h3><p>One RGB frame, I<sub>0</sub>, and the events before it. </p></div></div>
+      <div class="step"><div class="card"><span class="n">02</span><h3>The real future</h3><p>What the camera recorded over the next five frame intervals. </p></div></div>
+      <div class="step"><div class="card"><span class="n">03</span><h3>Three samples</h3><p>Three EventDiffusion forecasts of the same input, each a different plausible future of individual events and their timestamps. </p></div></div>
+      <div class="step"><div class="card"><span class="n">04</span><h3>A frame-based forecast</h3><p>SimVP predicts future frames from past ones, and ESIM turns them into events.</p></div></div>
+      <div class="step"><div class="card"><span class="n">05</span><h3>How does the events look temporally?</h3><p>Colour every pixel by its <b>mean event time since t<sub>0</sub></b> to see how far each forecast's motion travels over the horizon.</p></div></div>
+    </div>
+  </div>
+  <div class="sub">
+    <h3>Forecasting comparison</h3>
+    <p>BS-ERGB test sequences, averaged across five frame intervals (about 187&nbsp;ms).</p>
+  </div>
+  <div class="card">
+    <div class="table-scroll">
+      <table class="res">
+        <thead><tr><th>Method</th><th>Input</th><th>mIoU ↑</th><th>F1 ↑</th><th>CEFS ↑</th></tr></thead>
+        <tbody>
+          <tr class="group"><td colspan="5">Single RGB frame</td></tr>
+          <tr class="ours"><td>EventDiffusion</td><td>1 RGB frame</td><td>0.259</td><td>0.390</td><td><span class="barcell"><span class="track"><span class="fill" style="width:62%"></span></span>0.262</span></td></tr>
+          <tr class="group"><td colspan="5">Past RGB frames</td></tr>
+          <tr><td>SimVP + ESIM</td><td>2 RGB frames</td><td>0.230</td><td>0.359</td><td><span class="barcell"><span class="track"><span class="fill" style="width:31.7%"></span></span>0.133</span></td></tr>
+          <tr><td>SimVP + DVS-Voltmeter</td><td>2 RGB frames</td><td>0.238</td><td>0.369</td><td><span class="barcell"><span class="track"><span class="fill" style="width:33.1%"></span></span>0.139</span></td></tr>
+          <tr><td>Cosmos Edge + ESIM</td><td>5 RGB frames</td><td>0.167</td><td>0.274</td><td><span class="barcell"><span class="track"><span class="fill" style="width:30.2%"></span></span>0.127</span></td></tr>
+          <tr><td>Cosmos Edge + DVS-Voltmeter</td><td>5 RGB frames</td><td>0.170</td><td>0.277</td><td><span class="barcell"><span class="track"><span class="fill" style="width:31.4%"></span></span>0.132</span></td></tr>
+          <tr class="ours"><td>EventDiffusion</td><td>2 RGB frames</td><td class="r1">0.295</td><td class="r1">0.433</td><td class="r1"><span class="barcell"><span class="track"><span class="fill" style="width:70.2%"></span></span>0.295</span></td></tr>
+          <tr class="group"><td colspan="5">Event history</td></tr>
+          <tr><td>E-Motion</td><td>Events (100 ms)</td><td>0.221</td><td>0.329</td><td>N/A</td></tr>
+          <tr class="ours"><td>EventDiffusion</td><td>Events (20 ms)</td><td class="r3">0.274</td><td class="r3">0.409</td><td class="r3"><span class="barcell"><span class="track"><span class="fill" style="width:65%"></span></span>0.273</span></td></tr>
+          <tr class="ours"><td>EventDiffusion</td><td>1 RGB frame + events</td><td class="r2">0.292</td><td class="r2">0.426</td><td class="r2"><span class="barcell"><span class="track"><span class="fill" style="width:70%"></span></span>0.294</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+</section>
+
+<!-- ================= DOWNSTREAM ================= -->
+<section id="downstream">
+  <div class="sec-head">
+    <span class="eyebrow">Downstream</span>
+    <h2>What happens when you train downstream tasks on the generated events? </h2>
+  </div>
+  <div class="scrolly" id="sc-down">
+    <div class="sticky"><div class="media"></div><div class="pfoot"></div></div>
+    <div class="steps">
+      <div class="step"><div class="card"><span class="n">01 · E2VID</span><h3>Events to frames</h3><p>E2VID reconstructs frames from events. Each copy is trained on a different kind of events and run on <b>DSEC's real test events</b>. Left: the frame to match. Right: trained on real recordings.</p></div></div>
+      <div class="step"><div class="card"><span class="n">02 · E2VID</span><h3>Trained on EventDiffusion-FT's events</h3><p>The same network trained only on events EventDiffusion-FT generated from DSEC's training frames. Each tile shows its per-frame LPIPS, lower is better.</p></div></div>
+      <div class="step"><div class="card"><span class="n">03 · E2VID</span><h3>Other training events</h3><p>Below: the released checkpoint, trained on ESIM events of COCO images, and a copy trained on V2CE's events.</p></div></div>
+      <div class="step"><div class="card"><span class="n">04 · ESS</span><h3>Semantic segmentation</h3><p>ESS segments the same real events over a frozen E2VID trained on each kind of events. Left: the label. Each tile shows its per-frame mIoU, higher is better.</p></div></div>
+      <div class="step"><div class="card"><span class="n">05 · ESS</span><h3>All together</h3><p>Trained on real events, on EventDiffusion-FT's events, on real events over the released E2VID, and on V2CE's events. The clips are windows picked to illustrate; the tables below cover the full test sets.</p></div></div>
+    </div>
+  </div>
+  <div class="two" style="margin-top:1rem">
+    <div class="card"><div class="table-scroll"><table class="res">
+      <thead><tr><th>E2VID training events</th><th>MSE ↓</th><th>SSIM ↑</th><th>LPIPS ↓</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="4">Reference</td></tr>
+        <tr><td>Released E2VID (ESIM, COCO)</td><td>0.0842</td><td>0.423</td><td>0.525</td></tr>
+        <tr><td>Real events</td><td>0.0183</td><td>0.800</td><td>0.206</td></tr>
+        <tr class="group"><td colspan="4">Generated from DSEC's RGB frames</td></tr>
+        <tr><td>ESIM</td><td>0.1666</td><td>0.294</td><td>0.673</td></tr>
+        <tr><td>DVS-Voltmeter</td><td>0.1026</td><td>0.304</td><td>0.669</td></tr>
+        <tr><td>V2CE</td><td>0.0632</td><td>0.564</td><td>0.410</td></tr>
+        <tr class="ours"><td>EventDiffusion-FT</td><td class="r1">0.0485<span class="sd">±0.0115</span></td><td class="r1">0.725<span class="sd">±0.017</span></td><td class="r1">0.313<span class="sd">±0.015</span></td></tr>
+      </tbody></table></div></div>
+    <div class="card"><div class="table-scroll"><table class="res">
+      <thead><tr><th>ESS training events</th><th>mIoU (%) ↑</th><th>Acc. (%) ↑</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="3">Reference</td></tr>
+        <tr><td>Real events (released E2VID)</td><td>51.1</td><td>88.7</td></tr>
+        <tr><td>Real events</td><td>55.9</td><td>91.1</td></tr>
+        <tr class="group"><td colspan="3">Generated from DSEC's RGB frames</td></tr>
+        <tr><td>ESIM</td><td>34.5</td><td>78.2</td></tr>
+        <tr><td>DVS-Voltmeter</td><td>33.6</td><td>76.7</td></tr>
+        <tr><td>V2CE</td><td>45.1</td><td>85.3</td></tr>
+        <tr class="ours"><td>EventDiffusion-FT</td><td class="r1">54.3<span class="sd">±0.6</span></td><td class="r1">90.2<span class="sd">±0.4</span></td></tr>
+      </tbody></table></div></div>
+  </div>
+  <p class="note">E2VID trained from scratch on the events of DSEC's 41 training sequences and scored on the 12 DSEC test recordings against their frames. ESS trains its decoder on DSEC-Semantic's 8 training sequences over a frozen E2VID trained on the same kind of events, scored on its 3 test recordings. EventDiffusion-FT: mean ± std over three training seeds; highlighted: best among generated events.</p>
+</section>
+
+<!-- ================= RESULTS ================= -->
+<section id="results">
+  <div class="sub"><h3>Fidelity on each dataset</h3><p>CEFS, EQS and PECS Chamfer distance against the paired recording, native RGB frames.</p></div>
+  <div class="card">
+    <div class="seg" role="group" aria-label="Dataset" id="ds-tabs" style="margin-bottom:.6rem"></div>
+    <div class="table-scroll"><table class="res" id="ds-table"></table></div>
+    <p class="note">Simulators use 10× Super SloMo inputs; V2CE and both EventDiffusion checkpoints use native RGB frames. EventDiffusion: mean ± standard deviation over three sampling seeds. P-CD: PECS Chamfer distance. <span class="rank-key"><i style="background:var(--rank1)"></i>first <i style="background:var(--rank2)"></i>second <i style="background:var(--rank3)"></i>third</span></p>
+  </div>
+</section>
+
+<!-- ================= CEFS ================= -->
+<section id="cefs">
+  <div class="sec-head">
+    <span class="eyebrow">Metric</span>
+    <h2>CEFS: scoring event-stream fidelity.</h2>
+    <p class="lede">The Composite Event Fidelity Score compares a generated stream with the paired recording over the same interval and sensor area. It needs no trained network, no count matching and no realignment. It provides an analytical way to say how close an event stream is compared to a real event stream. </p>
+  </div>
+  <div class="callout"><b>Why a new score?</b> PECS can overlook excess events near real ones, and EQS is insensitive to some count errors: an empty output receives an EQS of 0.94 or higher despite missing all real activity. CEFS lies in [0, 1], equals 1 for an identical stream, and splits into count fidelity and shape fidelity. It will be released as a standalone package.</div>
+</section>
+
+<!-- ================= CITE ================= -->
+<section id="cite">
+  <div class="sec-head"><span class="eyebrow">Citation</span><h2>BibTeX</h2></div>
+  <div class="bibtex">
+    <button class="pill-btn" type="button" id="copy-bib">Copy</button>
+    <!-- arXiv preprint. Once arXiv assigns the ID, make the journal line: journal = {arXiv preprint arXiv:YYMM.NNNNN} -->
+<pre id="bib">@article{senthilkumar2026eventdiffusion,
+  title   = {EventDiffusion: Learning Native Event Stream Distribution from Videos},
+  author  = {Senthilkumar, Karthik Sundar and Thirgood, Christopher and Hadfield, Simon},
+  journal = {arXiv preprint},
+  year    = {2026}
+}</pre>
+  </div>
+</section>
+</main>
+
+<footer><div class="stage"><span>EventDiffusion project page.</span><span>The how-it-works card follows the <a href="https://showlab.github.io/o2laf/" target="_blank" rel="noopener">O²LaF</a> project page.</span></div></footer>
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script>
+  document.querySelectorAll('[data-href]').forEach(e => e.setAttribute('href', ED_NC(e.dataset.href)));
+  document.querySelectorAll('[data-poster]').forEach(e => { e.poster = ED_NC(e.dataset.poster); });
+  for (const u of ['assets/data.js', 'assets/method.js', 'assets/hero/hero.js']) document.write(`<script src="${ED_NC(u)}"><\/script>`);
+</script>
+<script>
+(() => {
+  'use strict';
+  const D = window.ED_DATA, M = window.ED_METHOD;
+  /* Robust to editing: an element the script looks for but the page no longer has becomes a detached stand-in, with a
+     console warning, instead of an error that stops everything after it; each section is set up, scrolled and animated
+     inside safely(), so a failure skips only that section (console error) and the rest of the page runs. */
+  const warned = new Set();
+  const safely = (name, f) => { try { return f(); } catch (e) { if (!warned.has(name)) { warned.add(name); console.error(`EventDiffusion page: ${name} skipped: ${e.message}`); } } };
+  const standIn = s => { if (!warned.has(s)) { warned.add(s); console.warn(`EventDiffusion page: ${s} is not in the page; the code that fills it does nothing.`); } return document.createElement('div'); };
+  const $ = (s, r = document) => r.querySelector(s) || standIn(s);
+  const el = (tag, attrs = {}, html) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else e.setAttribute(k, v); }
+    if (html != null) e.innerHTML = html;
+    return e;
+  };
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const narrow = () => innerWidth <= 900;
+  const root = document.documentElement;
+  const cssv = n => getComputedStyle(root).getPropertyValue(n).trim();
+  const tryPlay = v => { const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+  const fmt = n => n == null ? '' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
+  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const MONO = cssv('--font-mono');
+
+  /* ---------- theme ---------- */
+  const themeBtn = $('#theme'), themeHooks = [];
+  let COL = {};
+  const readCols = () => { COL = Object.fromEntries(['ours', 'fg', 'muted', 'dim', 'line', 'surface', 'bg', 'esa'].map(k => [k, cssv('--' + k)])); };
+  const theme = () => root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const showTheme = () => { themeBtn.textContent = theme() === 'dark' ? 'Day' : 'Night'; };
+  themeBtn.addEventListener('click', () => {
+    root.dataset.theme = theme() === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('ed-theme', root.dataset.theme); } catch (e) {}
+    showTheme(); readCols(); themeHooks.forEach(f => safely('redraw', f));
+  });
+  showTheme(); readCols();
+
+  /* ---------- nav ---------- */
+  const links = [...document.querySelectorAll('#nav a')];
+  const secs = links.map(a => document.querySelector(a.getAttribute('href')));
+  const markNav = () => {
+    let cur = -1;
+    secs.forEach((s, i) => { if (s && s.getBoundingClientRect().top <= innerHeight * 0.35) cur = i; });
+    links.forEach((a, i) => a.classList.toggle('on', i === cur));
+  };
+
+  /* ---------- names ---------- */
+  const DS = { dsec: 'DSEC', bs_ergb: 'BS-ERGB', cear: 'CEAR' };
+  const SHORT = { may29_water_tank_pouring_02: 'water_tank_pouring_02', paprika_1000_gain_control_02: 'paprika', 'between-buildings_night_comb': 'between-buildings_night' };
+  const short = s => SHORT[s] || s;
+  const ROLE = { RGB: 'rgb', Real: 'real', 'EventDiffusion-FT': 'ours' };
+  const NAME = { Real: 'Real recording' };
+  const keyPol = w => `<span><span class="sw" style="background:#ff0000"></span>ON</span><span><span class="sw" style="background:#0000ff"></span>OFF</span><span>${w}</span>`;
+  const keyTime = (lo, hi, extra) => `<span>${lo}<span class="ramp"></span>${hi}</span><span><span class="sw white"></span>${extra}</span>`;
+
+  /* ======================================================================
+     TileStage: one pinned canvas drawing named tiles of one video (an atlas) in any
+     arrangement, animating between arrangements. Tags are HTML.
+     ====================================================================== */
+  const stages = [];
+  /* Video frames reach the canvas only when a new one is presented (requestVideoFrameCallback, or polling if that goes
+     quiet), never mid-seek; a story's video is attached only near the screen and released far from it, so few decoders
+     run at once; the canvas is redrawn only when something changed. */
+  const HAS_RVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+  /* One video decodes at a time, page-wide: the hero's or the story most on screen (pickMedia, on every scroll). The
+     others are paused and released, so no two decoders ever feed canvases at once (which mixed frames between
+     sections on some browsers and GPUs). */
+  const mediaPool = [];
+  const pickMedia = () => {
+    let best = null, bestH = 40;
+    for (const m of mediaPool) { const r = m.el.getBoundingClientRect(), h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0); if (h > bestH) { bestH = h; best = m; } }
+    for (const m of mediaPool) if (m !== best) m.off();
+    if (best) best.on();
+  };
+  const capDpr = () => Math.min(narrow() ? 1.5 : 2, devicePixelRatio || 1);
+  class TileStage {
+    constructor(sticky) {
+      this.media = sticky.querySelector('.media');
+      this.canvas = el('canvas', { class: 'view', tabindex: '0' }); this.ctx = this.canvas.getContext('2d');
+      this.tagLayer = el('div', { class: 'tag-layer', 'aria-hidden': 'true' });
+      this.video = el('video', { muted: '', loop: '', playsinline: '', preload: 'auto', class: 'src-video', 'aria-hidden': 'true' });
+      this.video.muted = true; this.video.playsInline = true;
+      this.media.append(this.video, this.canvas, this.tagLayer);
+      this.snap = document.createElement('canvas'); this.sctx = this.snap.getContext('2d');
+      Object.assign(this, { from: {}, to: {}, anim: 1, animT0: 0, wipe: null, wipeK: 0, wipeTarget: 0, pos: 0.5, spec: null, src: null,
+        mode: 'ev', f: -1, snapT: -1, hasSnap: false, videoDrawn: false, token: 0, visible: false, userPaused: reduce, rate: 1, tags: {},
+        active: false, waitSeek: false, dirty: true, lastFrameAt: 0, rvfc: false });
+      this.video.addEventListener('loadeddata', () => {
+        if (this.pendingT) { this.waitSeek = true; this.video.currentTime = Math.min(this.pendingT, this.video.duration - 0.02); this.pendingT = 0; }
+        this.video.playbackRate = this.rate; this.hookFrames(); this.syncPlay();
+      });
+      this.video.addEventListener('seeked', () => { this.waitSeek = false; this.copyFrame(); });
+      new ResizeObserver(() => this.resize()).observe(this.media);
+      new IntersectionObserver(([e]) => { this.visible = e.isIntersecting; this.syncPlay(); }, { threshold: 0.05 }).observe(this.media);
+      mediaPool.push({ el: this.media, v: this.video, on: () => this.activate(), off: () => this.deactivate(),
+        wants: () => this.active && !this.userPaused && !!this.video.getAttribute('src') });
+      let drag = false;
+      const at = e => { const r = this.wipeRect(), b = this.canvas.getBoundingClientRect(); return r ? clamp((e.clientX - b.left - r.x) / r.w, 0, 1) : null; };
+      this.canvas.addEventListener('pointerdown', e => { if (this.wipeTarget && at(e) != null) { drag = true; try { this.canvas.setPointerCapture(e.pointerId); } catch (_) {} this.pos = at(e); this.dirty = true; } });
+      this.canvas.addEventListener('pointermove', e => { if (drag) { this.pos = at(e); this.dirty = true; } this.canvas.style.cursor = this.wipeTarget ? 'ew-resize' : 'default'; });
+      ['pointerup', 'pointercancel'].forEach(t => this.canvas.addEventListener(t, () => { drag = false; }));
+      this.canvas.addEventListener('keydown', e => {
+        if (!this.wipeTarget) return; const s = e.shiftKey ? .1 : .02;
+        if (e.key === 'ArrowLeft') this.pos = clamp(this.pos - s, 0, 1); else if (e.key === 'ArrowRight') this.pos = clamp(this.pos + s, 0, 1); else return;
+        this.dirty = true; e.preventDefault();
+      });
+      stages.push(this);
+    }
+    syncPlay() { if (this.active && !this.userPaused && this.video.getAttribute('src')) tryPlay(this.video); else this.video.pause(); }
+    activate() { if (this.active) return; this.active = true; this.attach(); }
+    reset() { if (this.src) this.setSource(this.src, false); }   /* forget the copied frame (its canvas may be wiped): poster, then video */
+    deactivate() { if (!this.active) return; this.active = false; this.detach(); }
+    attach() {
+      if (!this.src) return;
+      const url = this.src.url(this.mode);
+      if (this.srcBase !== url || !this.video.getAttribute('src')) { this.srcBase = url; this.video.src = ED_NC(url, true); this.video.playbackRate = this.rate; }
+      this.syncPlay();
+    }
+    detach() {   /* release the decoder; the canvas keeps the last frame */
+      if (!this.video.getAttribute('src')) return;
+      this.video.pause(); this.video.removeAttribute('src'); this.video.load(); this.srcBase = null; this.snapT = -1; this.pendingT = 0; this.waitSeek = false; this.rvfc = false;
+    }
+    copyFrame() {
+      const v = this.video; if (v.readyState < 2 || v.seeking || this.waitSeek || !v.videoWidth) return;
+      if (this.snap.width !== v.videoWidth || this.snap.height !== v.videoHeight) { this.snap.width = v.videoWidth; this.snap.height = v.videoHeight; }
+      this.sctx.drawImage(v, 0, 0); this.snapT = v.currentTime; this.hasSnap = this.videoDrawn = true; this.holdOld = false; this.dirty = true; this.lastFrameAt = performance.now();
+    }
+    hookFrames() {
+      if (!HAS_RVFC || this.rvfc) return; this.rvfc = true;
+      const cb = () => { if (!this.video.getAttribute('src')) { this.rvfc = false; return; } this.copyFrame(); this.video.requestVideoFrameCallback(cb); };
+      this.video.requestVideoFrameCallback(cb);
+    }
+    setSource(src, keepTime) {
+      const token = ++this.token;
+      this.pendingT = keepTime && this.video.getAttribute('src') ? this.video.currentTime : 0;
+      this.src = src;
+      const names = Object.keys(src.tiles), [, , sw, sh] = src.tiles[names[0]];
+      this.aspect = sw / sh;
+      if (!keepTime) {
+        this.tagLayer.innerHTML = ''; this.tags = {};
+        if (!src.noTags) names.forEach(n => { const t = el('span', { class: 'tag' }); t.style.opacity = 0; this.tagLayer.append(t); this.tags[n] = t; });
+        this.videoDrawn = false; this.holdOld = this.hasSnap;   /* keep the old frame up until the new one is in */
+        if (src.poster) { const im = new Image(); im.onload = () => { if (token !== this.token || this.videoDrawn) return; this.snap.width = im.naturalWidth; this.snap.height = im.naturalHeight; this.sctx.drawImage(im, 0, 0); this.hasSnap = true; this.holdOld = false; this.dirty = true; }; im.src = ED_NC(src.poster); }
+      }
+      this.snapT = -1; this.f = -1; this.waitSeek = false;
+      if (this.active) { this.srcBase = src.url(this.mode); this.video.src = ED_NC(this.srcBase, true); this.video.playbackRate = this.rate; }
+      if (this.spec) this.setLayout(this.spec, true);
+      this.dirty = true; this.syncPlay();
+    }
+    setMode(m) { if (m === this.mode || !this.src || !this.src.modes) return; this.mode = m; this.setSource(this.src, true); if (this.onMode) this.onMode(m); }
+    setRate(r) { this.rate = r; this.video.playbackRate = r; this.f = -1; }
+    resize() {
+      const w = this.media.clientWidth, h = this.media.clientHeight; if (!w || !h) return;
+      const dpr = capDpr(), W = Math.round(w * dpr), H = Math.round(h * dpr);
+      this.dpr = dpr; this.cw = w; this.ch = h;
+      if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
+      if (this.spec) this.setLayout(this.spec, true);
+      this.dirty = true; if (this.src) this.draw();   /* resizing clears the canvas: redraw now, not a frame later */
+    }
+    rectsFor(spec) {
+      const W = this.cw, H = this.ch, a = this.aspect || 1.33, g = narrow() ? 6 : 10, pad = narrow() ? 6 : 14, out = {};
+      if (spec.wipe) {
+        let tw = W - 2 * pad, th = tw / a; if (th > H - 2 * pad) { th = H - 2 * pad; tw = th * a; }
+        const r = { x: (W - tw) / 2, y: (H - th) / 2, w: tw, h: th, a: 1 };
+        out[spec.wipe[0]] = { ...r }; out[spec.wipe[1]] = { ...r }; return out;
+      }
+      const size = rows => { const nr = rows.length, nc = Math.max(...rows.map(r => r.length));
+        let tw = (W - 2 * pad - g * (nc - 1)) / nc, th = tw / a;
+        const maxTh = (H - 2 * pad - g * (nr - 1)) / nr; if (th > maxTh) { th = maxTh; tw = th * a; }
+        return [tw, th]; };
+      /* an alternative arrangement (spec.alt) wins when it gives larger tiles in this panel */
+      let rows = spec.rows, [tw, th] = size(rows);
+      if (spec.alt) { const [tw2, th2] = size(spec.alt); if (tw2 > tw * 1.08) { rows = spec.alt; tw = tw2; th = th2; } }
+      let y = (H - (rows.length * th + (rows.length - 1) * g)) / 2;
+      rows.forEach(r => { let x = (W - (r.length * tw + (r.length - 1) * g)) / 2; r.forEach(n => { out[n] = { x, y, w: tw, h: th, a: 1 }; x += tw + g; }); y += th + g; });
+      return out;
+    }
+    current() {
+      const e = ease(clamp(this.anim, 0, 1)), out = {};
+      for (const n of new Set([...Object.keys(this.from), ...Object.keys(this.to)])) {
+        const A = this.from[n], B = this.to[n];
+        if (!A) { out[n] = B; continue; } if (!B) { out[n] = A; continue; }
+        out[n] = { x: A.x + (B.x - A.x) * e, y: A.y + (B.y - A.y) * e, w: A.w + (B.w - A.w) * e, h: A.h + (B.h - A.h) * e, a: A.a + (B.a - A.a) * e };
+      }
+      return out;
+    }
+    setLayout(spec, instant) {
+      this.spec = spec; if (!this.cw) return;
+      const target = this.rectsFor(spec), cur = this.current(), from = {}, to = {};
+      for (const n of new Set([...Object.keys(cur), ...Object.keys(target)])) {
+        const c = cur[n], t = target[n];
+        if (t) { to[n] = t; from[n] = c && c.a > 0.01 ? c : { x: t.x + t.w * .04, y: t.y + t.h * .04, w: t.w * .92, h: t.h * .92, a: 0 }; }
+        else if (c && c.a > 0.01) { from[n] = c; to[n] = { ...c, a: 0 }; }
+      }
+      this.from = from; this.to = to; this.animT0 = performance.now(); this.anim = instant || reduce ? 1 : 0;
+      if (spec.wipe) { if (!this.wipeTarget) this.pos = 0.5; this.wipe = { ref: spec.wipe[0], ours: spec.wipe[1] }; this.wipeTarget = 1; } else this.wipeTarget = 0;
+      if (instant || reduce) this.wipeK = this.wipeTarget;
+    }
+    wipeRect() { if (!this.wipe || !this.wipeTarget) return null; return this.current()[this.wipe.ours]; }
+    tick(now, dt) {
+      if (!this.visible || !this.src || !this.cw) return;
+      const v = this.video;
+      if (v.currentTime !== this.snapT && (!HAS_RVFC || now - this.lastFrameAt > 250)) this.copyFrame();
+      const moving = this.anim < 1 || Math.abs(this.wipeTarget - this.wipeK) > 1e-3;
+      if (this.anim < 1) this.anim = clamp((now - this.animT0) / 750, 0, 1);
+      this.wipeK += clamp(this.wipeTarget - this.wipeK, -dt * 2.5, dt * 2.5);
+      const s = this.src, f = s.frames ? clamp(Math.floor(Math.max(0, this.snapT) * s.fps + 1e-3), 0, s.frames - 1) : 0;
+      if (f !== this.f) { this.f = f; this.info(); }
+      if (this.dirty || moving) { this.dirty = false; this.draw(); }
+    }
+    info() {
+      const inf = this.src.info ? this.src.info(this.f, this.mode, this.rate) : { tags: {}, readout: '' };
+      for (const [n, t] of Object.entries(this.tags)) { const d = inf.tags[n]; if (!d) continue; t.className = 'tag ' + d[2]; t.innerHTML = `${d[0]}${d[1] ? ` <i>${d[1]}</i>` : ''}`; }
+      if (this.readout) this.readout.innerHTML = inf.readout || '';
+      if (this.onFrame) this.onFrame(this.f);
+    }
+    draw() {
+      if (this.holdOld) return;
+      const c = this.ctx, d = this.dpr, R = this.current(), wp = this.wipe;
+      c.setTransform(d, 0, 0, d, 0, 0); c.fillStyle = COL.surface; c.fillRect(0, 0, this.cw, this.ch);   /* opaque: covers the source video */
+      if (!this.hasSnap) return;
+      c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+      const tiles = this.src.tiles, isOurs = n => ROLE[n] === 'ours' || (this.src.ours || []).includes(n);
+      const order = Object.keys(R).sort((p, q) => (wp && p === wp.ours) - (wp && q === wp.ours));
+      for (const n of order) {
+        const r = R[n]; if (!r || r.a < 0.01 || !tiles[n]) continue;
+        const [sx, sy, sw, sh] = tiles[n];
+        c.save(); c.globalAlpha = r.a;
+        if (wp && n === wp.ours && this.wipeK > 0.001) { const cx = r.x + r.w * this.pos * this.wipeK; c.beginPath(); c.rect(cx, r.y, r.x + r.w - cx, r.h); c.clip(); }
+        c.drawImage(this.snap, sx, sy, sw, sh, r.x, r.y, r.w, r.h);
+        c.restore();
+        if (isOurs(n) && r.a > 0.5 && !(wp && this.wipeK > 0.5)) { c.save(); c.globalAlpha = r.a; c.strokeStyle = COL.ours; c.lineWidth = 3; c.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); c.restore(); }
+      }
+      if (wp && this.wipeK > 0.02 && R[wp.ours]) {
+        const r = R[wp.ours], x = r.x + r.w * this.pos * this.wipeK, y = r.y + r.h / 2;
+        /* clips sit on white in both themes, so the divider is always dark */
+        c.save(); c.globalAlpha = this.wipeK; c.fillStyle = '#11141b'; c.fillRect(x - 1, r.y, 2, r.h);
+        c.beginPath(); c.arc(x, y, 17, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#ffffff'; c.font = `600 13px ${MONO}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('⇔', x, y + 1); c.restore();
+      }
+      for (const [n, t] of Object.entries(this.tags)) {
+        const r = R[n]; if (!r || r.a < 0.05) { t.style.opacity = 0; continue; }
+        t.style.opacity = r.a;
+        const right = wp && n === wp.ours && this.wipeK > 0.5;
+        t.style.transform = `translate(${right ? r.x + r.w - t.offsetWidth - 8 : r.x + 8}px, ${r.y + 8}px)`;
+      }
+    }
+  }
+
+  /* ---------- footer controls ---------- */
+  function seg(label, items, onPick, initial) {
+    const g = el('div', { class: 'seg', role: 'group', 'aria-label': label || 'Choice' });
+    if (label) g.append(el('span', { class: 'lbl' }, label));
+    const btns = items.map(([k, text]) => { const b = el('button', { type: 'button', 'data-k': k }, text); b.addEventListener('click', () => { press(k); onPick(k); }); g.append(b); return b; });
+    const press = k => btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.k === String(k) ? 'true' : 'false'));
+    press(initial);
+    return { el: g, press };
+  }
+  function footer(sticky, st, { scenes, onScene, modes, extraTop }) {
+    const f = sticky.querySelector('.pfoot'), out = {};
+    if (extraTop) f.append(extraTop);
+    if (scenes) { out.scenes = seg('', scenes.map((s, i) => [String(i), s]), k => onScene(+k), '0'); out.scenes.el.classList.add('scenes'); f.append(out.scenes.el); }
+    const row = el('div', { class: 'row' });
+    const play = el('button', { class: 'round', type: 'button', 'aria-label': 'Pause' }, '❚❚');
+    const showPlay = () => { const p = st.video.paused; play.textContent = p ? '▶' : '❚❚'; play.setAttribute('aria-label', p ? 'Play' : 'Pause'); };
+    st.video.addEventListener('play', showPlay); st.video.addEventListener('pause', showPlay);
+    play.addEventListener('click', () => { if (st.video.paused) { st.userPaused = false; tryPlay(st.video); } else { st.userPaused = true; st.video.pause(); } });
+    row.append(play);
+    if (modes) { out.modes = seg('', modes, k => st.setMode(k), modes[0][0]); row.append(out.modes.el); st.onMode = m => out.modes.press(m); }
+    out.rate = seg('speed', [['1', '1×'], ['0.5', '½×'], ['0.25', '¼×']], k => st.setRate(+k), '1'); row.append(out.rate.el);
+    out.legend = el('div', { class: 'legend' }); row.append(out.legend);
+    const read = el('span', { class: 'readout' }); row.append(read); st.readout = read;
+    f.append(row);
+    showPlay();
+    return out;
+  }
+
+  /* ---------- story controller: the last step whose card has passed the line is active ---------- */
+  const stories = [];
+  function story(scrolly, steps, apply) {
+    const els = [...scrolly.querySelectorAll('.step')];
+    const s = { cur: -1, update() {
+      const r = scrolly.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight) return;
+      const line = innerHeight * (narrow() ? 0.8 : 0.56);
+      let a = 0; els.forEach((e, i) => { if (e.querySelector('.card').getBoundingClientRect().top < line) a = i; });
+      if (a !== s.cur) { s.cur = a; els.forEach((e, i) => e.classList.toggle('on', i === a)); apply(steps[Math.min(a, steps.length - 1)], a); }
+    } };
+    stories.push(s);
+    return s;
+  }
+  const grid = (names, tw, th, cols = 3) => Object.fromEntries(names.map((n, i) => [n, [(i % cols) * tw, Math.floor(i / cols) * th, tw, th]]));
+
+  /* ---------- simulation stories ---------- */
+  function simSource(it, kind) {
+    const [tw, th] = it.tile;
+    return {
+      tiles: grid(it.order, tw, th), fps: it.fps, frames: it.frames, modes: true,
+      url: m => `assets/clips/${it.window}/${kind}_${m}.mp4`, poster: `assets/clips/${it.window}/${kind}_ev.jpg`,
+      info: (f, mode, rate) => ({
+        tags: Object.fromEntries(it.order.map((n, i) => {
+          if (i === 0) return [n, ['RGB', it.gap > 1 ? `given frame ${it.k[f]}` : `frame ${it.k[f]}`, 'rgb']];
+          const c = it.n[f][i - 1];
+          return [n, [NAME[n] || n, c == null ? 'no run' : `${fmt(c)} ev`, ROLE[n] || 'base']];
+        })),
+        readout: `<b>t = ${it.t_ms[f].toFixed(1)} ms</b> · ${it.gap > 1 ? 'last given frame' : 'frame'} ${it.k[f]} · ${Math.round(it.slow / rate)}× slower`,
+      }),
+    };
+  }
+  function simStory(id, kind, steps, timeMode = true) {
+    const sc = $(id), sticky = sc.querySelector('.sticky'), st = new TileStage(sticky), items = D.clips[kind];
+    const ui = footer(sticky, st, { scenes: items.map(it => `${DS[it.dataset]} <em>${short(it.sequence)}</em>`), onScene: i => st.setSource(simSource(items[i], kind)),
+                                    modes: timeMode ? [['ev', 'Polarity'], ['time', 'Event time']] : null });
+    const legend = () => { ui.legend.innerHTML = st.mode === 'ev' ? keyPol('events in the last 10&nbsp;ms') : keyTime('oldest', 'newest in 10&nbsp;ms', 'no event'); };
+    const press = st.onMode || (() => {}); st.onMode = m => { press(m); legend(); };
+    st.setSource(simSource(items[0], kind)); legend();
+    story(sc, steps, s => { if (s.mode) st.setMode(s.mode); st.setLayout(s); });
+  }
+  const R6 = ['RGB', 'Real', 'EventDiffusion-FT', 'ESIM', 'V2CE', 'DVS-Voltmeter'];
+  const ALL6 = { rows: [R6.slice(0, 3), R6.slice(3)], alt: [R6.slice(0, 2), R6.slice(2, 4), R6.slice(4)] };
+  safely('Between frames', () => simStory('#sc-native', 'interp', [
+    { rows: [['RGB']], mode: 'ev' }, { rows: [['RGB', 'Real']], mode: 'ev' }, { rows: [['Real', 'EventDiffusion-FT']], mode: 'ev' },
+    { ...ALL6, mode: 'ev' },
+  ], false));
+  safely('Sparse RGB', () => simStory('#sc-sparse', 'gap5', [
+    { rows: [['RGB', 'Real']], mode: 'ev' }, { rows: [['Real', 'EventDiffusion-FT']], mode: 'ev' },
+    { ...ALL6, mode: 'ev' },
+  ]));
+
+  /* ---------- timing: umbrella + live trace ---------- */
+  safely('Timing', () => {
+    const U = D.umbrella, nU = U.pct[U.order[0]].length;
+    const UNAME = { 'Real events': 'Real recording', EventDiffusion: 'EventDiffusion', ESIM: 'ESIM', 'DVS-Voltmeter': 'DVS-Voltmeter' };
+    const UROLE = { 'Real events': 'real', EventDiffusion: 'ours' };
+    const sc = $('#sc-timing'), sticky = sc.querySelector('.sticky'), st = new TileStage(sticky), s0 = U.tile[0];
+    st.setSource({ tiles: grid(U.order, s0, s0, 2), fps: U.fps, frames: nU, ours: ['EventDiffusion'],
+      url: () => 'assets/umbrella/umbrella.mp4', poster: 'assets/umbrella/umbrella.jpg',
+      info: (f, mode, rate) => ({ tags: Object.fromEntries(U.order.map(m => [m, [UNAME[m], '', UROLE[m] || 'base']])),
+                                  readout: `<b>t = ${f} ms</b> · frame ${f + 1} of ${nU} · ${Math.round(50 / rate)}× slower` }) });
+    const ui = footer(sticky, st, {});
+    ui.legend.innerHTML = keyPol('events in each 1&nbsp;ms frame');
+    const trace = $('#trace'), WIN = 60, YMAX = 150;
+    let shown = U.order.slice(), geo = null;
+    function buildTrace() {
+      const box = trace.getBoundingClientRect(); if (!box.width || !box.height) return;
+      const TW = box.width, TH = box.height, PADL = 40, PADR = 10, n = shown.length, bottom = 52;
+      const slot = Math.min((TH - bottom) / n, 150), STRIP = Math.max(14, Math.min(110, slot - 22)), ppm = (TW - PADL - PADR) / WIN, tall = STRIP > 40;
+      let s = '';
+      shown.forEach((m, k) => {
+        const y0 = k * slot + 18, y1 = y0 + STRIP;
+        s += `<text class="nm" x="${PADL}" y="${y0 - 5}" font-size="${tall ? 11.5 : 10}">${UNAME[m]}</text>` + (tall ? `<text x="${TW - PADR}" y="${y0 - 5}" font-size="10.5" text-anchor="end">variation ${U.sd[m].toFixed(1)}%</text>` : '');
+        (tall ? [0, 50, 100, 150] : [100]).forEach(p => { const y = y1 - p / YMAX * STRIP;
+          if (p === 100) s += `<line class="ref" x1="${PADL}" x2="${TW - PADR}" y1="${y}" y2="${y}"/>`; else if (p) s += `<line class="gl" x1="${PADL}" x2="${TW - PADR}" y1="${y}" y2="${y}"/>`;
+          s += `<text x="${PADL - 6}" y="${y + 3.5}" font-size="9.5" text-anchor="end">${p}</text>`; });
+        s += `<line class="ax" x1="${PADL}" x2="${PADL}" y1="${y0 - 2}" y2="${y1}"/><line class="ax" x1="${PADL}" x2="${TW - PADR}" y1="${y1}" y2="${y1}"/>`;
+      });
+      const ym = (n * slot) / 2;
+      s += `<text x="10" y="${ym}" font-size="9.5" text-anchor="middle" transform="rotate(-90 10 ${ym})">${tall ? '% of the method\'s average' : '% of average'}</text>`;
+      const xl = (n - 1) * slot + 18 + STRIP + 14;
+      s += `<text x="${(PADL + TW - PADR) / 2}" y="${xl + 13}" font-size="10" text-anchor="middle">time in the clip (ms)</text>`;
+      const bx1 = TW - PADR, bx0 = bx1 - U.rgb_interval_ms * ppm, by = xl + 30;
+      s += `<path class="br" d="M${bx0} ${by - 5}V${by}H${bx1}V${by - 5}"/><text x="${bx0 - 6}" y="${by + 1}" font-size="10" text-anchor="end">one RGB frame interval = ${U.rgb_interval_ms.toFixed(1)} ms</text>`;
+      trace.innerHTML = `<svg viewBox="0 0 ${TW} ${TH}" xmlns="http://www.w3.org/2000/svg">${s}<g class="live"></g></svg>`;
+      geo = { TW, PADR, slot, STRIP, ppm, xl, live: trace.querySelector('.live') };
+    }
+    function drawTrace(i) {
+      if (!geo) return;
+      const { TW, PADR, slot, STRIP, ppm, xl, live } = geo, lo = Math.max(0, i - WIN);
+      let s = '';
+      for (let t = Math.ceil(lo / 10) * 10; t <= i; t += 10) s += `<text x="${TW - PADR - (i - t) * ppm}" y="${xl}" font-size="9.5" text-anchor="middle">${t}</text>`;
+      shown.forEach((m, k) => {
+        const y1 = k * slot + 18 + STRIP, v = U.pct[m]; let pts = '';
+        for (let j = lo; j <= i; j++) pts += `${(TW - PADR - (i - j) * ppm).toFixed(1)},${(y1 - Math.min(v[j], YMAX) / YMAX * STRIP).toFixed(1)} `;
+        const cls = UROLE[m] === 'ours' ? ' ours' : '';
+        s += `<polyline class="ln${cls}" points="${pts}"/><circle class="dot${cls}" cx="${TW - PADR}" cy="${(y1 - Math.min(v[i], YMAX) / YMAX * STRIP).toFixed(1)}" r="4"/>`;
+      });
+      live.innerHTML = s;
+    }
+    new ResizeObserver(() => { buildTrace(); drawTrace(Math.max(0, st.f)); }).observe(trace);
+    st.onFrame = f => drawTrace(f);
+    const RE = 'Real events', ED = 'EventDiffusion', ES = 'ESIM', DV = 'DVS-Voltmeter';
+    story(sc, [{ rows: [[RE]], tr: [RE] }, { rows: [[ES, DV]], alt: [[ES], [DV]], tr: [ES, DV] }, { rows: [[RE], [ED]], tr: [RE, ED] }, { rows: [[RE, ED], [ES, DV]], tr: [RE, ED, ES, DV] }],
+      s => { st.setLayout(s); shown = s.tr; buildTrace(); drawTrace(Math.max(0, st.f)); });
+    const umbStats = $('#umb-stats');   /* optional: the page may leave the stats row out */
+    if (umbStats) umbStats.innerHTML = U.order.map(m => `<div class="stat ${UROLE[m] === 'ours' ? 'ours' : ''}"><span class="v">${U.sd[m].toFixed(1)}%</span><span class="k">${UNAME[m]}<br>frame-to-frame variation</span></div>`).join('');
+    $('#umb-sd-text').textContent = U.order.map(m => `${UNAME[m]} ${U.sd[m].toFixed(1)}%`).join(', ');
+  });
+
+  /* ---------- forecasting ---------- */
+  safely('Forecasting', () => {
+    const FN = ['Input', 'Real future', 'EventDiffusion #1', 'EventDiffusion #2', 'EventDiffusion #3', 'SimVP + ESIM'];
+    const FROLE = ['rgb', 'real', 'ours', 'ours', 'ours', 'base'];
+    const sc = $('#sc-forecast'), sticky = sc.querySelector('.sticky'), st = new TileStage(sticky);
+    const src = it => ({ tiles: grid(FN, it.tile[0], it.tile[1]), fps: it.fps, frames: it.frames, modes: true, ours: FN.slice(2, 5),
+      url: m => `assets/forecast_clips/${it.sequence}_${m}.mp4`, poster: `assets/forecast_clips/${it.sequence}_ev.jpg`,
+      info: (f, mode, rate) => ({
+        tags: Object.fromEntries(FN.map((n, i) => {
+          if (i === 0) return [n, mode === 'ev' ? ['Input', `I₀ (frame ${it.o}) + past events`, 'rgb'] : ['RGB', `frame ${it.k[f]} ${it.j[f] === 0 ? '(given)' : '(not given)'}`, 'rgb']];
+          const c = mode === 'ev' ? it.n[f][i - 1] : it.seen[f][i - 1], real = it.seen[f][0];
+          const sub = mode === 'ev' ? `${fmt(c)} ev` : i === 1 ? `${fmt(c)} ev so far` : `${(c / Math.max(real, 1)).toFixed(2)}× real`;
+          return [n, [i === 1 ? 'Real future (not given)' : n, sub, FROLE[i]]];
+        })),
+        readout: `<b>t₀ + ${it.t_ms[f].toFixed(0)} ms</b> · interval ${it.j[f] + 1} of ${it.bounds_ms.length - 1} · ${Math.round(1000 / (it.slice_ms * it.fps) / rate)}× slower`,
+      }) });
+    const hz = el('div', { class: 'horizon' });
+    let cur = D.forecast[0];
+    const drawHz = () => { hz.innerHTML = '<div class="h-bar"></div>' + cur.bounds_ms.map(b => `<div class="h-tick" style="left:${b / cur.T_ms * 100}%"></div>`).join('') +
+      cur.bounds_ms.slice(0, -1).map((b, j) => `<span class="h-lab" style="left:${(b + cur.bounds_ms[j + 1]) / 2 / cur.T_ms * 100}%">I${j}→I${j + 1}</span>`).join('') + '<div class="h-now"></div>'; };
+    const ui = footer(sticky, st, { scenes: D.forecast.map(it => `BS-ERGB <em>${short(it.sequence)}</em>`), onScene: i => { cur = D.forecast[i]; drawHz(); st.setSource(src(cur)); legend(); },
+      modes: [['ev', 'Events in each 1 ms'], ['time', 'Mean time since t₀']], extraTop: hz });
+    const legend = () => { ui.legend.innerHTML = st.mode === 'ev' ? keyPol('events in each 1&nbsp;ms slice') : keyTime('t₀', `t₀ + ${cur.T_ms.toFixed(0)} ms`, 'no event yet'); };
+    const press = st.onMode; st.onMode = m => { press(m); legend(); };
+    st.onFrame = f => { const n = hz.querySelector('.h-now'); if (n) n.style.left = (cur.t_ms[f] / cur.T_ms * 100) + '%'; };
+    drawHz(); st.setSource(src(cur)); legend();
+    story(sc, [
+      { rows: [['Input']], mode: 'ev' }, { rows: [['Input', 'Real future']], mode: 'ev' },
+      { rows: [['Real future'], ['EventDiffusion #1', 'EventDiffusion #2', 'EventDiffusion #3']], alt: [['Real future', 'EventDiffusion #1'], ['EventDiffusion #2', 'EventDiffusion #3']], mode: 'ev' },
+      { rows: [['Real future', 'EventDiffusion #1', 'SimVP + ESIM']], alt: [['Real future', 'EventDiffusion #1'], ['SimVP + ESIM']], mode: 'ev' },
+      { rows: [FN.slice(0, 3), FN.slice(3)], alt: [FN.slice(0, 2), FN.slice(2, 4), FN.slice(4)], mode: 'time' },
+    ], s => { st.setMode(s.mode); st.setLayout(s); });
+  });
+
+  /* ---------- downstream ---------- */
+  safely('Downstream', () => {
+    const sc = $('#sc-down'), sticky = sc.querySelector('.sticky'), st = new TileStage(sticky);
+    const GEO = { e2vid: [480, 360], ess: [480, 330] };   /* the montage's ref_quad layout at 3/4 scale (web_assets.downstream) */
+    const atlas = task => { const [w, h] = GEO[task], g = 6, sep = 18;   /* the montage builder's ref_quad layout */
+      return { ref: [0, Math.floor((h + g) / 2), w, h], real: [w + sep, 0, w, h], ours: [2 * w + sep + g, 0, w, h], released: [w + sep, h + g, w, h], v2ce: [2 * w + sep + g, h + g, w, h] }; };
+    const TASK = { e2vid: { metric: 'LPIPS', f: v => v.toFixed(3) }, ess: { metric: 'mIoU', f: v => v.toFixed(1) + '%' } };
+    let task = null, win = 0;
+    const src = () => { const w = D.downstream[task][win];
+      return { tiles: atlas(task), noTags: true, ours: ['ours'], url: () => `assets/downstream/${task}/${w.id}.mp4`, poster: `assets/downstream/${task}/${w.id}.jpg`,
+        info: () => ({ tags: {}, readout: `<b>${w.seq}</b> · window mean ${TASK[task].metric}: ` +
+          Object.entries(w.mean).map(([k, v]) => `${k.replace('-trained', '').replace('EventDiffusion-FT', 'ours')} <b>${TASK[task].f(v)}</b>`).join(' · ') }) }; };
+    const box = el('div');
+    const ui = footer(sticky, st, { extraTop: box });
+    ui.legend.innerHTML = '<span>Real time; ½× or ¼× to read the per-frame scores drawn into each tile.</span>';
+    const drawWins = () => { box.innerHTML = '';
+      const g = seg(task === 'e2vid' ? 'E2VID' : 'ESS', D.downstream[task].map((w, i) => [String(i), `${w.seq} <em>${w.first}–${w.last}</em>`]), k => { win = +k; st.setSource(src()); }, String(win));
+      g.el.classList.add('scenes'); box.append(g.el); };
+    const setTask = t => { if (t === task) return; task = t; win = 0; drawWins(); st.setSource(src()); };
+    setTask('e2vid');
+    story(sc, [
+      { task: 'e2vid', rows: [['ref', 'real']] }, { task: 'e2vid', rows: [['real', 'ours']] }, { task: 'e2vid', rows: [['real', 'ours'], ['released', 'v2ce']] },
+      { task: 'ess', rows: [['ref', 'real', 'ours']], alt: [['ref'], ['real', 'ours']] }, { task: 'ess', rows: [['ref', 'real', 'ours'], ['released', 'v2ce']] },
+    ], s => { setTask(s.task); st.setLayout(s); });
+  });
+
+  /* ======================================================================
+     How it works: the O²LaF-style pipeline card and the stage inspector, on the whole frame
+     (window.ED_METHOD: one interval of EventDiffusion-FT's output).
+     ====================================================================== */
+  let hw = { tick() {} };
+  safely('How it works', () => {
+    const b64u = (s, T) => { const bin = atob(s), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return T === 8 ? u8 : new Uint16Array(u8.buffer); };
+    const hash = n => { n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n ^= n >>> 16; return (n >>> 0) / 4294967296; };
+    const pi = xi => Math.cos(Math.PI * xi / 2) ** 2;
+    const S = M.slices, CW = M.cw, CH = M.ch, ON = b64u(M.on, 8), OFF = b64u(M.off, 8);
+    const fmtN = n => n.toLocaleString();
+    /* EAD: cells with events, and the scale (95th percentile of non-empty cells) */
+    const nz = []; let tot = []; for (let c = 0; c < CW * CH; c++) if (ON[c] + OFF[c]) { nz.push(c); tot.push(ON[c] + OFF[c]); }
+    tot.sort((a, b) => a - b); const cellSc = Math.max(1, tot[Math.floor(.95 * tot.length)]);
+    const eadImg = (() => { const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH; return cv; })(), eadCtx = eadImg.getContext('2d'), eadData = eadCtx.createImageData(CW, CH);
+    let eadXi = -1, eadKept = 0;
+    function renderEAD(xi) {   /* the slice's counts thinned with keep probability cos^2(pi xi / 2), one hashed draw per event */
+      if (Math.abs(xi - eadXi) < 1e-4) return; eadXi = xi;
+      const keep = pi(xi), d = eadData.data; d.fill(255); eadKept = 0;
+      for (const c of nz) {
+        let on = 0, off = 0;
+        for (let j = 0; j < ON[c]; j++) if (hash(c * 512 + j * 2) < keep) on++;
+        for (let j = 0; j < OFF[c]; j++) if (hash(c * 512 + j * 2 + 1) < keep) off++;
+        eadKept += on + off; const n = on + off; if (!n) continue;
+        const a = Math.min(1, n / cellSc), s = on / n, o = c * 4;
+        d[o] = 255 - a * 255 * (1 - s); d[o + 1] = 255 - a * 255; d[o + 2] = 255 - a * 255 * s;
+      }
+      eadCtx.putImageData(eadData, 0, 0);
+    }
+    const blit = (cv, src, smooth) => { if (!src) return; const r = cv.getBoundingClientRect(), dpr = capDpr(), w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+      if (!w || !h) return; if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } const c = cv.getContext('2d'); c.imageSmoothingEnabled = !!smooth; c.clearRect(0, 0, w, h); c.drawImage(src, 0, 0, w, h); };
+    /* ETD: the interval binned at M.bins around the middle of slice 5, with slice-only times (etd_u_*) and ETD's (etd_g_*);
+       preloaded once the section is near, so moving the slider never shows a half-loaded image */
+    const etdSrc = (w, i) => ED_NC(`assets/method/etd_${w}_${i}.webp`);
+    const preloadETD = () => { if (preloadETD.done) return; preloadETD.done = true;
+      M.bins.forEach((_, i) => ['u', 'g'].forEach(w => { const im = new Image(); im.src = etdSrc(w, i); })); };
+
+    /* ---------------- the pipeline diagram ---------------- */
+    const G = id => document.getElementById(id) || standIn('#' + id);
+    const CV = { in: 'var(--fg)', ead: 'var(--ead)', esa: 'var(--esa)', etd: 'var(--etd)', out: 'var(--ours)' };
+    const WIRES = ['hm-w-rgb1', 'hm-w-rgb2', 'hm-w-a', 'hm-w-b', 'hm-w-p', 'hm-w-ead', 'hm-w-esa', 'hm-w-etd', 'hm-w-fb'];
+    const STEPS = [
+      { on: { 'hm-w-a': 'in', 'hm-w-b': 'in', 'hm-w-p': 'in', 'hm-w-rgb1': 'in', 'hm-w-rgb2': 'in' }, frames: ['hm-fa', 'hm-fb', 'hm-fp'] },
+      { on: { 'hm-w-a': 'ead', 'hm-w-b': 'ead', 'hm-w-p': 'ead', 'hm-w-rgb1': 'ead' }, box: 'hm-ead' },
+      { on: { 'hm-w-ead': 'esa', 'hm-w-rgb2': 'esa' }, box: 'hm-esa' },
+      { on: { 'hm-w-esa': 'etd' }, box: 'hm-etd' },
+      { on: { 'hm-w-etd': 'out', 'hm-w-fb': 'out' }, frames: ['hm-fo', 'hm-fp'], flow: true },
+    ];
+    const MSG = [
+      `<b>1. Inputs.</b> Frames I<sub>k</sub> and I<sub>k+1</sub> and the events generated before I<sub>k</sub> (the last ${M.past_ms} ms shown). The ${(M.dur_us / 1000).toFixed(0)} ms between the frames is cut into ${S} slices.`,
+      '<b>2. EAD · how many.</b> Discrete count diffusion samples integer ON and OFF counts for every 2-pixel cell and slice, from an empty map at ξ = 1 to full counts at ξ = 0, conditioned on the RGB features, the past events and the camera\'s learned event rate.',
+      '<b>3. ESA · where.</b> Each cell\'s ON and OFF counts are placed on its four pixels, conditioned on the RGB frames and the events already placed around it. Every cell keeps exactly its total.',
+      `<b>4. ETD · when.</b> Pixels and polarities stay fixed; only the times are diffused, from times known only to their ${(M.dur_us / S / 1000).toFixed(0)} ms slice to continuous ones. Each reverse step keeps the events whose times look plausible and redraws the rest from a learned density with bursts, readout ties and a refractory gap. The box bins ${M.mini_bin_ms * 1000} µs of events near the ball: as more of them hold their generated times, the smeared edges sharpen.`,
+      '<b>5. A native event stream.</b> Individual events (x, y, t, p) with microsecond timestamps. They become the past events for the next pair of frames, which is also how EventDiffusion forecasts past the last frame.',
+    ];
+    const btns = [...document.querySelectorAll('#hw .lam-steps button')], say = G('hw-say'), playBtn = G('hw-play'), pulses = [G('hm-p0'), G('hm-p1'), G('hm-p2')];
+    const eadCv = G('hm-ead-cv'), etdImgs = M.holds.map((_, k) => G('hm-etd-' + k));
+    let step = 0, t0 = performance.now(), auto = !reduce, vis = false, active = [], lastEtd = -1, lastEad = -1;
+    const syncPlay = () => { playBtn.textContent = auto ? '❚❚' : '▶'; playBtn.setAttribute('aria-pressed', String(!auto)); playBtn.setAttribute('aria-label', auto ? 'Pause diagram animation' : 'Play diagram animation'); };
+    function applyStep(s) {
+      step = s; t0 = performance.now(); lastEtd = lastEad = -1;
+      btns.forEach((b, i) => b.setAttribute('aria-pressed', String(i === s))); say.innerHTML = MSG[s];
+      const st = STEPS[s];
+      WIRES.forEach(id => { const k = st.on[id], el = G(id);
+        el.setAttribute('class', 'lm-wire' + (id === 'hm-w-fb' ? ' dash' : '') + (k ? ' on' : '') + (k && st.flow ? ' flow' : '')); el.style.setProperty('--c', k ? CV[k] : '');
+        el.setAttribute('marker-end', `url(#hm-m-${k || 'dim'})`); });
+      ['hm-ead', 'hm-esa', 'hm-etd'].forEach(id => G(id).setAttribute('class', 'lm-box' + (st.box === id ? ' on' : '')));
+      ['hm-fa', 'hm-fb', 'hm-fp', 'hm-fo'].forEach(id => G(id).setAttribute('class', 'lm-frame' + ((st.frames || []).includes(id) ? ' on' : '')));
+      G('hm-fp').style.setProperty('--c', s === 4 ? 'var(--ours)' : 'var(--fg)');
+      active = Object.entries(st.on).filter(([id]) => !id.startsWith('hm-w-rgb')).map(([id, k]) => [G(id), CV[k]]).slice(0, 3);
+      pulses.forEach((p, k) => { p.setAttribute('class', 'lm-pulse' + (active.length && !reduce ? ' show' : '')); p.setAttribute('fill', active.length ? active[k % active.length][1] : 'none'); });
+      if (s >= 1 && s <= 4 && !auto) setTab(['ead', 'ead', 'esa', 'etd', 'etd'][s]);
+    }
+    btns.forEach((b, i) => b.addEventListener('click', () => { auto = false; syncPlay(); applyStep(i); }));
+    playBtn.addEventListener('click', () => { auto = !auto; syncPlay(); if (auto) t0 = performance.now(); });
+    new IntersectionObserver(([e]) => { vis = e.isIntersecting; }, { threshold: 0.15 }).observe(G('hw'));
+    const DUR = 3000;
+
+    /* ---------------- the stage inspector ---------------- */
+    const frame = G('insp-frame'), icv = G('insp-cv'), iimg = G('insp-img'), iin = G('insp-in'), iticks = G('insp-ticks'), inote = G('insp-note'), iv = G('insp-v'), insp = G('insp'), ihint = G('insp-hint');
+    const TABS = { ead: ['EAD · how many', 'var(--ead)'], esa: ['ESA · where', 'var(--esa)'], etd: ['ETD · when, at any resolution', 'var(--etd)'] };
+    let tab = null;
+    const pair = G('insp-pair'), eu = G('etd-u'), eg = G('etd-g'), etdRow = G('insp-etd');
+    let zoomed = true;
+    pair.style.setProperty('--zx', (M.zoom[0] * 100) + '%'); pair.style.setProperty('--zy', (M.zoom[1] * 100) + '%');
+    const zoomSeg = seg('', [['ball', 'Zoom on the ball'], ['whole', 'Whole frame']], k => { zoomed = k === 'ball'; pair.classList.toggle('zoomed', zoomed); }, 'ball');
+    G('insp-etd-zoom').replaceWith(zoomSeg.el); pair.classList.add('zoomed');
+    new IntersectionObserver(([e]) => { if (e.isIntersecting) preloadETD(); }, { rootMargin: '100% 0px' }).observe(G('insp'));
+    const tabSeg = seg('', Object.entries(TABS).map(([k, [l]]) => [k, l]), k => setTab(k), 'ead');
+    G('insp-tabs').replaceWith(tabSeg.el);
+    const ticks = a => { iticks.innerHTML = a.map(x => `<span>${x}</span>`).join(''); };
+    function setTab(k) {
+      tab = k; tabSeg.press(k); insp.style.setProperty('--c', TABS[k][1]);
+      const sl = G('insp-sl'); sl.hidden = k === 'esa';
+      iimg.hidden = k !== 'esa'; icv.hidden = k !== 'ead';
+      frame.hidden = k === 'etd'; pair.hidden = etdRow.hidden = k !== 'etd';
+      if (k === 'ead') { iin.min = 0; iin.max = 1; iin.step = 0.005; iin.value = 0.5; ticks(['ξ = 1 · empty', '0.75', '0.5', '0.25', '0 · generated']); }
+      if (k === 'etd') { preloadETD(); iin.min = 0; iin.max = M.bins.length - 1; iin.step = 1; iin.value = M.bins.findIndex(b => b.ms === 1);
+        ticks(M.bins.map(b => b.ms >= 1 ? `${b.ms} ms` : `${Math.round(b.ms * 1000)} µs`).filter((_, i) => i % 2 === 0)); }
+      renderInsp();
+    }
+    function renderInsp() {
+      const v = +iin.value;
+      if (tab === 'ead') {
+        const xi = 1 - v; renderEAD(xi); blit(icv, eadImg, false);
+        iv.textContent = `ξ = ${xi.toFixed(2)}`;
+        inote.innerHTML = xi >= 0.99 ? `<b>An empty count map.</b> Sampling starts here and adds events at every reverse step. Slice ${M.slice + 1} of ${S}, ${CW} × ${CH} two-pixel cells.`
+          : xi <= 0.01 ? `<b>The generated counts</b> for slice ${M.slice + 1} of ${S}: ${fmtN(M.n_slice)} events over ${CW} × ${CH} two-pixel cells.`
+          : `Each event kept with probability cos²(πξ/2) = <b>${pi(xi).toFixed(2)}</b>: ${fmtN(eadKept)} of ${fmtN(M.n_slice)} events in slice ${M.slice + 1}.`;
+      } else if (tab === 'esa') {
+        iimg.src = ED_NC('assets/method/esa.webp'); iv.textContent = `slice ${M.slice + 1} of ${S}`;
+        inote.innerHTML = `<b>ESA's output:</b> the ${fmtN(M.n_slice)} events EAD counted in slice ${M.slice + 1}, each cell's ON and OFF counts placed on its four pixels. Every cell keeps exactly its total.`;
+      } else if (tab === 'etd') {
+        const i = Math.round(v), b = M.bins[i], lab = b.ms >= 1 ? `${b.ms} ms` : `${Math.round(b.ms * 1000)} µs`, slMs = M.dur_us / S / 1000;
+        eu.src = etdSrc('u', i); eg.src = etdSrc('g', i);
+        iv.textContent = `bin ${lab}`;
+        inote.innerHTML = b.ms < slMs
+          ? `<b>The same events, binned at ${lab}</b> around ${M.bin_centre_ms} ms (${fmtN(b.n_g)} with ETD's times). EAD and ESA fix each event's pixel, polarity and ${slMs.toFixed(0)} ms slice; with times known only to the slice, a ${lab} bin holds a random ${Math.round(100 * b.ms / slMs)}% of the slice's events, spread over all ${slMs.toFixed(0)} ms of motion, so the edges smear. ETD puts each event at its own moment, so the edges stay sharp at any bin length.`
+          : `<b>The same events, binned at ${lab}.</b> A bin this long holds whole ${slMs.toFixed(0)} ms slices, so both look alike: counts, pixels and slices come from EAD and ESA. ETD's continuous times matter below the slice length; drag the slider down to see it.`;
+      }
+    }
+    iin.addEventListener('input', renderInsp);
+    new ResizeObserver(() => { if (tab === 'ead') renderInsp(); lastEad = -1; }).observe(G('insp'));
+    themeHooks.push(() => { eadXi = lastEad = lastEtd = -1; if (tab === 'ead') renderInsp(); });
+    setTab('ead');
+
+    applyStep(0); syncPlay();
+    hw = { tick(now) {
+      if (!vis) return;
+      let p = (now - t0) / DUR;
+      if (auto && p >= 1.25) { applyStep((step + 1) % STEPS.length); p = 0; }
+      const e = reduce ? 1 : ease(clamp(p * 1.15, 0, 1));
+      const xiE = step < 1 ? 1 : step === 1 ? 1 - e : 0, xiT = step < 3 ? 1 : step === 3 ? 1 - e : 0;
+      if (xiE !== lastEad) { lastEad = xiE; renderEAD(xiE); blit(eadCv, eadImg, false); }
+      const kT = Math.round(pi(xiT) * (M.holds.length - 1));
+      if (kT !== lastEtd) { lastEtd = kT; etdImgs.forEach((im, k) => im.setAttribute('opacity', k === kT ? 1 : 0)); }
+      G('hm-ead-chip-t').textContent = `ξ = ${xiE.toFixed(2)}`;
+      G('hm-etd-chip-t').textContent = `hold p = ${pi(xiT).toFixed(2)}`;
+      ['hm-ead-chip', 'hm-ead-chip-t'].forEach(id => G(id).classList.toggle('on', step === 1));
+      ['hm-etd-chip', 'hm-etd-chip-t'].forEach(id => G(id).classList.toggle('on', step === 3));
+      G('hm-esa-img').setAttribute('opacity', (step < 2 ? 0.12 : step === 2 ? 0.12 + 0.88 * e : 1).toFixed(2));
+      G('hm-img-o').setAttribute('opacity', (step === 4 ? 0.12 + 0.88 * e : 0.12).toFixed(2));
+      pulses.forEach((pl, k) => { if (!active.length) return; const [path] = active[k % active.length], L = path.getTotalLength();
+        const q = path.getPointAtLength(((now / 1300 + k / 3) % 1) * L); pl.setAttribute('cx', q.x.toFixed(1)); pl.setAttribute('cy', q.y.toFixed(1)); });
+    } };
+  });
+
+  /* ---------- hero: one clip, simulation (frames given) into forecasting (none given) ---------- */
+  let heroTick = () => {};
+  safely('hero', () => {
+    const HC = window.ED_HERO_CLIP, v = $('#hc-video'), tl = $('#hc-tl');
+    const n = HC.k_end - HC.k0, VW = 1000, PAD = 18, X = pos => PAD + pos / n * (VW - 2 * PAD);
+    const xo = X(HC.o - HC.k0);
+    let s = `<svg viewBox="0 0 ${VW} 70" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Timeline: RGB frames ${HC.k0} to ${HC.o} are given, frames after ${HC.o} are not">`;
+    s += `<rect x="${X(0)}" y="18" width="${xo - X(0)}" height="8" rx="4" fill="var(--ours)" opacity=".28"/>`;
+    s += `<rect x="${xo}" y="18" width="${X(n) - xo}" height="8" rx="4" fill="none" stroke="var(--fc)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".9"/>`;
+    for (let k = HC.k0; k <= HC.k_end; k++) {
+      const x = X(k - HC.k0), given = k <= HC.o;
+      s += given ? `<rect x="${x - 6}" y="16" width="12" height="12" rx="2" fill="var(--fg)"/>` : `<rect x="${x - 6}" y="16" width="12" height="12" rx="2" fill="var(--bg)" stroke="var(--dim)" stroke-width="1.5" stroke-dasharray="3 2"/>`;
+      s += `<text class="${k === HC.k0 || k === HC.o || k === HC.k_end ? '' : 'kn'}" x="${x}" y="44" font-size="11" text-anchor="middle">${k}</text>`;
+    }
+    s += `<text class="lbl" x="${(X(0) + xo) / 2}" y="64" font-size="12" text-anchor="middle">■ RGB frames given → events generated between them</text>`;
+    s += `<text class="lbl" x="${(xo + X(n)) / 2}" y="64" font-size="12" text-anchor="middle">□ no frames given → events forecast</text>`;
+    s += `<text x="${X(0) - 4}" y="11" font-size="10" text-anchor="start">RGB frame</text>`;
+    s += `<g id="hc-head"><line x1="0" x2="0" y1="6" y2="32" stroke-width="2.5"/><path d="M -6 2 L 6 2 L 0 9 z"/></g></svg>`;
+    tl.innerHTML = s;
+    const head = $('#hc-head'), line = head.querySelector('line'), tri = head.querySelector('path');
+    $('#hc-cap').innerHTML = `BS-ERGB <i>${HC.sequence}</i>, ${HC.slow}× slower than real time; each clip frame shows the last ${HC.win_ms} ms of events. Up to frame ${HC.o}, RGB frames are given and EventDiffusion-FT generates the events between them. After frame ${HC.o} no frame is given: EventDiffusion forecasts the events from frame ${HC.o} and the events before it (one sample).`;
+    let f = -1, active = false, userPaused = reduce;
+    const sync = () => { if (active && !userPaused && v.getAttribute('src')) tryPlay(v); else v.pause(); };
+    v.addEventListener('click', () => { if (v.paused) { userPaused = false; tryPlay(v); } else { userPaused = true; v.pause(); } });
+    mediaPool.push({ el: v, v, wants: () => active && !userPaused && !!v.getAttribute('src'),
+      on: () => { if (active) return; active = true; if (!v.getAttribute('src')) v.src = ED_NC('assets/hero/hero.mp4', true); sync(); },
+      off: () => { if (!active) return; active = false; v.pause(); if (v.getAttribute('src')) { v.removeAttribute('src'); v.load(); } } });
+    heroTick = () => {
+      if (!active) return;
+      const g = clamp(Math.floor(v.currentTime * HC.fps + 1e-3), 0, HC.t.length - 1);
+      if (g === f) return; f = g;
+      const fc = HC.k[g] >= HC.o, col = fc ? 'var(--fc)' : 'var(--ours)';
+      head.setAttribute('transform', `translate(${X(HC.pos[g])} 0)`); line.setAttribute('stroke', col); tri.setAttribute('fill', col);
+      $('#hc-sim').classList.toggle('on', !fc); $('#hc-fc').classList.toggle('on', fc);
+      $('#hc-tl-tag').innerHTML = fc ? `RGB <i>last given frame ${HC.o}, none after</i>` : `RGB <i>frame ${HC.k[g]} (given)</i>`;
+      const tr = $('#hc-tr-tag'); tr.className = 'tag r ' + (fc ? 'fc' : 'ours');
+      tr.innerHTML = fc ? `EventDiffusion forecast <i>${fmt(HC.n[g])} ev</i>` : `EventDiffusion-FT <i>${fmt(HC.n[g])} ev</i>`;
+      $('#hc-read').innerHTML = `<b>t = ${HC.t[g].toFixed(0)} ms</b> after frame ${HC.k0} · ${HC.slow}× slower`;
+    };
+    sync();
+  });
+
+  /* ---------- chart ---------- */
+  const CADENCE = [
+    { m: 'ESIM', x: 0.460, y: 0.289, cd: [7.15, 9.18], eqs: [0.971, 0.969], lab: [0, -14, 'middle'] },
+    { m: 'v2e', x: 0.141, y: 0.034, cd: [32.4, 79.8], eqs: [0.966, 0.940], lab: [0, -13, 'middle'] },
+    { m: 'IEBCS', x: 0.062, y: 0.009, cd: [39.7, 48.8], eqs: [0.944, 0.930], lab: [11, 4, 'start'] },
+    { m: 'DVS-Voltmeter', x: 0.461, y: 0.288, cd: [7.18, 9.31], eqs: [0.968, 0.964], lab: [0, 24, 'middle'] },
+    { m: 'V2CE', x: 0.513, y: 0.280, cd: [9.09, 11.9], eqs: [0.978, 0.971], lab: [11, 5, 'start'] },
+    { m: 'FracEvent', x: 0.422, y: 0.289, cd: [7.35, 9.05], eqs: [0.969, 0.966], lab: [-11, 4, 'end'] },
+    { m: 'EventDiffusion-G', ours: true, x: 0.574, y: 0.363, cd: [6.73, 7.58], eqs: [0.985, 0.978], lab: [-13, 5, 'end'] },
+    { m: 'EventDiffusion-FT', ours: true, x: 0.611, y: 0.425, cd: [6.60, 7.45], eqs: [0.989, 0.983], lab: [-13, 5, 'end'] },
+  ];
+  safely('CEFS chart', () => {
+  const chartEl = $('#chart'), tip = $('#tip');
+  function drawChart() {
+    const W = Math.max(chartEl.parentElement.clientWidth, 600), H = Math.round(Math.min(520, Math.max(360, W * 0.52)));
+    const m = { l: 60, r: 18, t: 16, b: 54 }, X = v => m.l + (v / 0.7) * (W - m.l - m.r), Y = v => H - m.b - (v / 0.5) * (H - m.t - m.b);
+    let s = `<svg class="chart-svg" xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+    for (let i = 0; i <= 7; i++) { const v = i / 10; s += `<line class="grid" x1="${X(v)}" x2="${X(v)}" y1="${Y(0)}" y2="${Y(0.5)}"/><text class="tick" x="${X(v)}" y="${Y(0) + 18}" text-anchor="middle">${v.toFixed(1)}</text>`; }
+    for (let i = 0; i <= 5; i++) { const v = i / 10; s += `<line class="grid" x1="${X(0)}" x2="${X(0.7)}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${X(0) - 9}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(1)}</text>`; }
+    s += `<rect class="frame" x="${X(0)}" y="${Y(0.5)}" width="${X(0.7) - X(0)}" height="${Y(0) - Y(0.5)}"/>`;
+    s += `<text class="axis" x="${(X(0) + X(0.7)) / 2}" y="${H - 10}" text-anchor="middle">CEFS with native RGB frames →</text>`;
+    s += `<text class="axis" transform="translate(15 ${(Y(0) + Y(0.5)) / 2}) rotate(-90)" text-anchor="middle">CEFS with every fifth frame (Gap-5×) →</text>`;
+    s += `<text class="hint" x="${X(0.7) - 10}" y="${Y(0.5) + 18}" text-anchor="end">better ↗</text>`;
+    CADENCE.slice().sort((a, b) => !!a.ours - !!b.ours).forEach(p => {
+      const cx = X(p.x), cy = Y(p.y), [dx, dy, anchor] = p.lab;
+      s += `<circle class="${p.ours ? 'dot-ours' : 'dot-base'}" cx="${cx}" cy="${cy}" r="${p.ours ? 8 : 6}"/><text class="${p.ours ? 'lab-ours' : 'lab-base'}" x="${cx + dx}" y="${cy + dy}" text-anchor="${anchor}">${p.m}</text><circle class="hit" data-m="${p.m}" cx="${cx}" cy="${cy}" r="16"/>`;
+    });
+    chartEl.innerHTML = s + '</svg>';
+  }
+  chartEl.addEventListener('pointermove', e => {
+    const h = e.target.closest('.hit'); if (!h) { tip.classList.remove('on'); return; }
+    const p = CADENCE.find(c => c.m === h.dataset.m);
+    tip.textContent = `${p.m}\nNative RGB: CEFS ${p.x.toFixed(3)} · EQS ${p.eqs[0].toFixed(3)} · CD ${p.cd[0]}\nGap-5×: CEFS ${p.y.toFixed(3)} · EQS ${p.eqs[1].toFixed(3)} · CD ${p.cd[1]}`;
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - 300) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; tip.classList.add('on');
+  });
+  chartEl.addEventListener('pointerleave', () => tip.classList.remove('on'));
+  drawChart(); new ResizeObserver(() => drawChart()).observe(chartEl.parentElement); themeHooks.push(drawChart);
+  });
+  themeHooks.push(() => { stages.forEach(s => { s.f = -1; s.dirty = true; }); });
+
+  /* ---------- per-dataset table ---------- */
+  const METHODS = ['ESIM', 'v2e', 'IEBCS', 'DVS-Voltmeter', 'V2CE', 'FracEvent', 'EventDiffusion-G', 'EventDiffusion-FT'];
+  const DST = {
+    'DSEC': [[['0.575', 0], ['0.977', 3], ['3.74', 3]], [['0.324', 0], ['0.976', 0], ['9.77', 0]], [['0.415', 0], ['0.973', 0], ['9.38', 0]], [['0.576', 3], ['0.974', 0], ['3.86', 0]], [['0.502', 0], ['0.971', 0], ['4.77', 0]], [['0.554', 0], ['0.974', 0], ['3.85', 0]], [['0.636', 2, '0.002'], ['0.989', 2, '0.000'], ['3.56', 1, '0.02']], [['0.684', 1, '0.003'], ['0.991', 1, '0.000'], ['3.62', 2, '0.03']]],
+    'EDS': [[['0.618', 0], ['0.983', 0], ['6.29', 3]], [['0.310', 0], ['0.983', 0], ['31.8', 0]], [['0.404', 0], ['0.980', 0], ['27.0', 0]], [['0.611', 0], ['0.981', 0], ['6.40', 0]], [['0.634', 3], ['0.991', 2], ['6.72', 0]], [['0.553', 0], ['0.979', 0], ['6.38', 0]], [['0.635', 2, '0.001'], ['0.989', 3, '0.000'], ['6.05', 2, '0.02']], [['0.658', 1, '0.002'], ['0.992', 1, '0.000'], ['5.77', 1, '0.03']]],
+    'BS-ERGB': [[['0.472', 3], ['0.985', 2], ['5.18', 3]], [['0.302', 0], ['0.981', 0], ['11.4', 0]], [['0.364', 0], ['0.976', 0], ['9.29', 0]], [['0.468', 0], ['0.980', 0], ['5.46', 0]], [['0.456', 0], ['0.983', 3], ['10.0', 0]], [['0.451', 0], ['0.980', 0], ['5.30', 0]], [['0.550', 2, '0.003'], ['0.980', 0, '0.001'], ['5.16', 2, '0.06']], [['0.592', 1, '0.002'], ['0.990', 1, '0.000'], ['4.88', 1, '0.05']]],
+    'CEAR': [[['0.363', 0], ['0.971', 0], ['13.2', 0]], [['0.133', 0], ['0.964', 0], ['37.8', 0]], [['0.182', 0], ['0.963', 0], ['37.5', 0]], [['0.394', 0], ['0.974', 3], ['12.5', 3]], [['0.461', 3], ['0.969', 0], ['14.8', 0]], [['0.325', 0], ['0.967', 0], ['13.0', 0]], [['0.476', 2, '0.004'], ['0.984', 2, '0.000'], ['12.2', 1, '0.1']], [['0.509', 1, '0.003'], ['0.986', 1, '0.000'], ['12.2', 1, '0.0']]],
+  };
+  safely('results table', () => {
+    const tabs = $('#ds-tabs'); let active = 'DSEC';
+    const cell = ([v, r, sd], pre = '', post = '') => `<td class="${r ? 'r' + r : ''}">${pre}${v}${sd != null ? `<span class="sd">±${sd}</span>` : ''}${post}</td>`;
+    const render = () => {
+      tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.textContent === active ? 'true' : 'false'));
+      let h = '<thead><tr><th>Method</th><th>CEFS ↑</th><th>EQS ↑</th><th>P-CD ↓</th></tr></thead><tbody>';
+      DST[active].forEach((r, i) => { const w = (parseFloat(r[0][0]) / 0.7 * 100).toFixed(1);
+        h += `<tr class="${[METHODS[i].startsWith('EventDiffusion') ? 'ours' : '', i === 6 ? 'sep' : ''].join(' ').trim()}"><td>${METHODS[i]}</td>` + cell(r[0], `<span class="barcell"><span class="track"><span class="fill" style="width:${w}%"></span></span>`, '</span>') + cell(r[1]) + cell(r[2]) + '</tr>'; });
+      $('#ds-table').innerHTML = h + '</tbody>';
+    };
+    Object.keys(DST).forEach(n => { const b = el('button', { type: 'button' }, n); b.addEventListener('click', () => { active = n; render(); }); tabs.append(b); });
+    render();
+  });
+
+  /* ---------- BibTeX ---------- */
+  safely('BibTeX', () => {
+  const copyBtn = $('#copy-bib');
+  copyBtn.addEventListener('click', () => {
+    const done = ok => { copyBtn.textContent = ok ? 'Copied' : 'Select and copy'; setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1600); };
+    if (navigator.clipboard) navigator.clipboard.writeText($('#bib').textContent).then(() => done(true), () => done(false)); else done(false);
+  });
+  });
+
+  /* ---------- go ---------- */
+  let scrollQueued = false;
+  const onScroll = () => { if (scrollQueued) return; scrollQueued = true; requestAnimationFrame(() => { scrollQueued = false; safely('nav', markNav); stories.forEach((s, i) => safely('story ' + (i + 1), () => s.update())); safely('playback', pickMedia); }); };
+  addEventListener('scroll', onScroll, { passive: true }); addEventListener('resize', onScroll);
+  /* Coming back. A hidden, frozen or sleeping page loses things the browser reclaims: it pauses and releases video
+     decoders, stops their frame callbacks, and after a sleep may reset the GPU, which wipes every canvas. Rather than
+     trust what survives, after AWAY_MS away (tab hidden, page frozen, or no animation frame for that long, as in a
+     machine's sleep) every video is unloaded, every copied frame forgotten, every canvas redrawn, and the video on
+     screen loaded afresh. Wall-clock time: performance.now() does not advance during a system sleep on some platforms. */
+  const AWAY_MS = 5000;
+  let awayAt = 0, awayTimer = 0, lastRevive = -1e9;
+  const releaseAll = () => mediaPool.forEach(m => m.off());
+  const revive = () => {
+    if (document.hidden || performance.now() - lastRevive < 1000) return; lastRevive = performance.now();
+    releaseAll(); stages.forEach(s => safely('panel reset', () => s.reset())); themeHooks.forEach(f => safely('redraw', f)); pickMedia();
+  };
+  document.addEventListener('visibilitychange', () => {
+    clearTimeout(awayTimer);
+    if (document.hidden) { awayAt = Date.now(); awayTimer = setTimeout(releaseAll, AWAY_MS); }   /* hidden a while: free the decoder */
+    else if (Date.now() - awayAt >= AWAY_MS) revive(); else pickMedia();
+  });
+  addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   /* restored from the back/forward cache: load afresh */
+  document.addEventListener('resume', revive);                       /* unfrozen (Chrome's page lifecycle) */
+  [...document.querySelectorAll('canvas'), ...stages.map(s => s.snap)].forEach(c => c.addEventListener('contextrestored', revive));
+  /* The watchdog, once a second, on the video that should be playing: played again if the browser paused it; loaded
+     again if it errored (at most 3 times running) or its clock stood still for 3 s with data in hand. */
+  let wdAt = 0;
+  const reload = m => { m.still = 0; m.lastT = -1; m.off(); m.on(); };
+  const watchdog = now => {
+    if (now - wdAt < 1000) return; wdAt = now;
+    for (const m of mediaPool) {
+      const v = m.v;
+      if (!m.wants()) { m.still = 0; m.lastT = -1; continue; }
+      if (v.error) { if ((m.fails = (m.fails || 0) + 1) <= 3) reload(m); continue; }
+      if (v.paused) { tryPlay(v); continue; }
+      if (v.readyState >= 3 && !v.seeking && v.currentTime === m.lastT) { if (++m.still >= 3) reload(m); continue; }
+      if (v.currentTime !== m.lastT && m.lastT >= 0) m.fails = 0;
+      m.still = 0; m.lastT = v.currentTime;
+    }
+  };
+  let lastNow = performance.now(), lastWall = Date.now();
+  const loop = now => {
+    requestAnimationFrame(loop);
+    const wall = Date.now(); if (wall - lastWall >= AWAY_MS) safely('revive', revive); lastWall = wall;
+    const dt = Math.min(0.1, (now - lastNow) / 1000); lastNow = now;
+    stages.forEach((s, i) => safely('panel ' + (i + 1), () => s.tick(now, dt)));
+    safely('How it works animation', () => hw.tick(now)); safely('hero animation', () => heroTick(now)); safely('watchdog', () => watchdog(now));
+  };
+  requestAnimationFrame(loop);
+  setTimeout(onScroll, 0);
+})();
+</script>
+</body>
+</html>
