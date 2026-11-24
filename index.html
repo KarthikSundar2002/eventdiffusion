@@ -124,6 +124,8 @@ section { padding-block: 5.5rem 1rem; border-top: 1px solid var(--line); scroll-
 .hero .sum b.s { color: var(--ours); font-weight: 600; } .hero .sum b.f { color: var(--fc-ink); font-weight: 600; }
 .people { font-size: .92rem; color: var(--muted); }
 .people b { color: var(--fg); font-weight: 600; }
+.people a { text-decoration: underline; text-decoration-color: var(--dim); text-decoration-thickness: 1px; text-underline-offset: .2em; transition: text-decoration-color .2s; }
+.people a:hover { text-decoration-color: currentColor; }
 .cta { display: flex; flex-wrap: wrap; gap: .55rem; }
 .btn { display: inline-flex; align-items: center; gap: .45rem; padding: .7rem 1.05rem; border-radius: 999px; text-decoration: none;
   font: 600 .9rem/1 var(--font-body); background: var(--fg); color: var(--bg); border: 1px solid var(--fg); }
@@ -376,6 +378,63 @@ tr.ours .barcell .fill { background: var(--ours); }
 footer { border-top: 1px solid var(--line); padding-block: 2rem 3rem; color: var(--dim); font-size: .82rem; margin-top: 4rem; }
 footer .stage { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .6rem; }
 footer a { color: var(--muted); }
+
+/* ---------- CEFS walkthrough: one real window, each component in turn (data: assets/cefs/cefs_demo.js) ---------- */
+.cw { --cw-c: var(--ours); display: grid; gap: .7rem; }
+.cw-top { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; align-items: center; }
+.cw-stage { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: .7rem; }
+.cw-clouds, .cw-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .85rem 1rem; min-width: 0; display: flex; flex-direction: column; gap: .5rem; }
+.cw-heads { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; text-align: center; font: 500 .7rem/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); }
+.cw-heads span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-heads .g { color: var(--cw-c); }
+#cw-canvas { display: block; width: 100%; aspect-ratio: 2 / 1.12; background: var(--plate); border: 1px solid var(--line); border-radius: 8px; }
+.cw-sub { font-size: .8rem; color: var(--muted); line-height: 1.4; text-align: center; }
+.cw-ph { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
+.cw-panel h4 { margin: 0; font: 700 1.15rem/1.2 var(--font-display); font-stretch: 110%; }
+.cw-say { color: var(--muted); font-size: .9rem; line-height: 1.55; min-height: 4.65em; }
+#cw-viz { display: block; width: 100%; height: auto; overflow: visible; }
+.cw-eq { font: 500 .78rem/1.5 var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+.cw-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .6rem; }
+.cw-tile { text-align: left; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: .7rem .8rem; display: grid; gap: .35rem; min-width: 0; transition: border-color .2s, box-shadow .2s; }
+.cw-tile:hover { border-color: var(--muted); }
+.cw-tile[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.cw-tile .k { font: 500 .68rem/1.25 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 900px) { .cw-tile .k { min-height: 2.5em; } }
+.cw-tile .v { font: 800 clamp(1.15rem, 2.2vw, 1.55rem)/1 var(--font-display); font-stretch: 112%; font-variant-numeric: tabular-nums; }
+.cw-tile .b { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; }
+.cw-tile .b i { display: block; height: 100%; width: 0; background: var(--muted); }
+.cw-tile.total .v { color: var(--cw-c); }
+.cw-tile.total .b i { background: var(--cw-c); }
+@media (max-width: 900px) {
+  .cw-stage { grid-template-columns: minmax(0, 1fr); }
+  .cw-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+#cw-viz text { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+#cw-viz .t-fg { fill: var(--fg); }
+#cw-viz .t-lab { fill: var(--fg); font: 600 12px var(--font-body); }
+#cw-viz .t-g { fill: var(--cw-c); }
+#cw-viz .t-big { fill: var(--cw-c); font: 800 28px var(--font-display); }
+#cw-viz .t-inv { fill: var(--surface); }
+#cw-viz .t-in { fill: #ffffff; font-weight: 600; font-size: 11px; }
+#cw-viz .ax { stroke: var(--line); stroke-width: 1.2; fill: none; }
+#cw-viz .curve { stroke: var(--muted); stroke-width: 2; fill: none; }
+#cw-viz .real { fill: var(--fg); }
+#cw-viz .gen { fill: var(--cw-c); }
+#cw-viz .track { fill: var(--raised); }
+#cw-viz .mark { fill: var(--cw-c); stroke: var(--surface); stroke-width: 2; }
+#cw-viz .dash { stroke: var(--cw-c); stroke-width: 1.4; stroke-dasharray: 3 3; fill: none; }
+#cw-viz .dash.r { stroke: var(--fg); }
+#cw-viz .brk { stroke: var(--fg); stroke-width: 1.4; fill: none; }
+#cw-viz .on { fill: #ff0000; }
+#cw-viz .off { fill: #0000ff; }
+#cw-viz .wbar { fill: var(--fg); }
+#cw-viz .wbar.inv { fill: var(--surface); }
+#cw-viz .scan-u { fill: none; stroke: var(--surface); stroke-width: 5; }
+#cw-viz .scan { fill: none; stroke: var(--fg); stroke-width: 2.2; }
+#cw-viz .line-r { fill: none; stroke: var(--fg); stroke-width: 1.5; }
+#cw-viz .area-g { fill: var(--cw-c); fill-opacity: .25; stroke: var(--cw-c); stroke-width: 1; }
+#cw-viz .bar-r { fill: var(--muted); }
+#cw-viz .bar-max { fill: var(--cw-c); }
 </style>
 </head>
 <body>
@@ -408,7 +467,7 @@ footer a { color: var(--muted); }
       </div>
       <div class="hero-side">
         <p class="sum">EventDiffusion samples individual events, each with its pixel, polarity and continuous timestamp, from a distribution learned on real event-camera recordings. It generates the events <b class="s">between RGB frames</b>, and predicts <b class="f">future events</b>.</p>
-        <p class="people"><b>Karthik Sundar Senthilkumar, Christopher Thirgood, Simon Hadfield</b></p>
+        <p class="people"><b><a href="https://karthiksundar.in/" target="_blank" rel="noopener">Karthik Sundar Senthilkumar</a>, Christopher Thirgood, Simon Hadfield</b></p>
         <div class="cta">
           <a class="btn line soon" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>Paper <small>soon</small></a>
           <a class="btn line soon" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code <small>soon</small></a>
@@ -746,6 +805,30 @@ footer a { color: var(--muted); }
     <h2>CEFS: scoring event-stream fidelity.</h2>
     <p class="lede">The Composite Event Fidelity Score compares a generated stream with the paired recording over the same interval and sensor area. It needs no trained network, no count matching and no realignment. It provides an analytical way to say how close an event stream is compared to a real event stream. </p>
   </div>
+  <!-- CEFS walkthrough: data in assets/cefs/cefs_demo.js, built by tools/build_cefs_demo.py from the frozen evgen CEFS. -->
+  <div class="sub"><h3>CEFS, one component at a time.</h3><p>A real EDS recording scored against EventDiffusion-G, or against copies of itself with one property broken. Each step shows one component, with the numbers the reference implementation computes for this window.</p></div>
+  <div class="cw" id="cw">
+    <div class="cw-top">
+      <div class="seg" role="group" aria-label="Generated stream"><span class="lbl">Score</span><span class="seg" id="cw-main"></span></div>
+      <div class="seg" role="group" aria-label="Corrupted copies of the recording"><span class="lbl">or a corrupted recording</span><span class="seg" id="cw-cor"></span></div>
+    </div>
+    <div class="cw-stage">
+      <div class="cw-clouds">
+        <div class="cw-heads"><span>Real recording</span><span class="g" id="cw-gname">EventDiffusion-G</span></div>
+        <canvas id="cw-canvas" role="img" aria-label="Two slowly turning space–time point clouds, the real recording and the compared stream, with time running into the page."></canvas>
+        <p class="cw-sub" id="cw-sub"></p>
+      </div>
+      <div class="cw-panel">
+        <div class="cw-ph"><span class="eyebrow" id="cw-n">Step 1 of 6</span><button type="button" class="lam-play" id="cw-play" aria-label="Pause the walkthrough" aria-pressed="false">❚❚</button></div>
+        <h4 id="cw-title">Count</h4>
+        <p class="cw-say" id="cw-say"></p>
+        <svg id="cw-viz" viewBox="0 0 440 232" role="img" aria-label="The current component of the score"></svg>
+        <p class="cw-eq" id="cw-eq"></p>
+      </div>
+    </div>
+    <div class="cw-tiles" id="cw-tiles" role="group" aria-label="CEFS components; choose one to show its step"></div>
+    <p class="note">EDS test recording <i>13_airplane</i>, one 13.3&nbsp;ms frame interval: the median-CEFS window of EventDiffusion-G's 60 on this recording (shared checkpoint, sampling seed 0). The clouds draw one event in four, ON red and OFF blue, with time running into the page; every score is computed on all events. Each corruption starts from the recording and breaks one property.</p>
+  </div>
   <div class="callout"><b>Why a new score?</b> PECS can overlook excess events near real ones, and EQS is insensitive to some count errors: an empty output receives an EQS of 0.94 or higher despite missing all real activity. CEFS lies in [0, 1], equals 1 for an identical stream, and splits into count fidelity and shape fidelity. It will be released as a standalone package.</div>
 </section>
 
@@ -771,7 +854,7 @@ footer a { color: var(--muted); }
 <script>
   document.querySelectorAll('[data-href]').forEach(e => e.setAttribute('href', ED_NC(e.dataset.href)));
   document.querySelectorAll('[data-poster]').forEach(e => { e.poster = ED_NC(e.dataset.poster); });
-  for (const u of ['assets/data.js', 'assets/method.js', 'assets/hero/hero.js']) document.write(`<script src="${ED_NC(u)}"><\/script>`);
+  for (const u of ['assets/data.js', 'assets/method.js', 'assets/hero/hero.js', 'assets/cefs/cefs_demo.js']) document.write(`<script src="${ED_NC(u)}"><\/script>`);
 </script>
 <script>
 (() => {
@@ -1475,6 +1558,274 @@ footer a { color: var(--muted); }
     render();
   });
 
+  /* ---------- CEFS walkthrough: one real EDS window, each component in turn ----------
+     Data: assets/cefs/cefs_demo.js (window.CEFS_DEMO), built by tools/build_cefs_demo.py with the frozen evgen CEFS. Every
+     number shown is that implementation's output for this window; nothing here recomputes a score. Driven by the page loop. */
+  const cefsWalk = { tick() {}, redraw() {} };
+  safely('CEFS walkthrough', () => {
+    const box = document.getElementById('cw'), DATA = window.CEFS_DEMO;
+    if (!box) return;
+    if (!DATA) { box.hidden = true; return; }
+    const WIN = DATA.window, LUS = WIN.L_us, LMS = LUS / 1000;
+    const intl = v => Math.round(v).toLocaleString('en-GB');
+    const B = (x, y, l) => Math.max(x, y) + l * Math.min(x, y) * (1 - Math.max(x, y));
+    const derive = c => {
+      const f = c.fields, dtim = B(f.D_async, f.D_temporal, DATA.lambda.T);
+      return { dcount: 1 - f.C, dpol: 1 - f.P, dst: f.D_ST, hst: f.H_ST, dasync: f.D_async, dtemp: f.D_temporal,
+               dtim, dcore: B(f.D_ST, dtim, DATA.lambda.C), q: f.Q, C: f.C, P: f.P };
+    };
+    /* Events: little-endian uint16 triplets x | p << 15, y, t (µs from the window start). */
+    const decode = b64 => {
+      const bin = atob(b64), n = bin.length >> 1, u = new Uint16Array(n);
+      for (let i = 0; i < n; i++) u[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
+      const m = n / 3, x = new Float32Array(m), y = new Float32Array(m), t = new Float32Array(m), p = new Uint8Array(m);
+      for (let i = 0; i < m; i++) { const v = u[3 * i]; x[i] = v & 0x7fff; p[i] = v >> 15; y[i] = u[3 * i + 1]; t[i] = u[3 * i + 2]; }
+      return { x, y, t, p, m };
+    };
+    const REAL = decode(DATA.real.ev), decoded = {};
+    const evOf = c => decoded[c.id] || (decoded[c.id] = decode(c.ev));
+
+    const STEPS = [
+      { title: 'Count', dur: 6500, say: 'How many events? D<sub>count</sub> compares the two counts on a log scale, so twice and half as many events cost the same.' },
+      { title: 'Polarity', dur: 5000, say: "Is the ON/OFF balance right? D<sub>pol</sub> is the difference between the two streams' shares of ON events." },
+      { title: 'Space–time structure', dur: 7000, say: 'Are events in the right place at the right time? Each polarity is splatted into space–time histograms at 30 bin sizes and compared by Hellinger distance. Bin sizes at which the recording already disagrees with perturbed copies of itself get little weight.' },
+      { title: 'Asynchrony', dur: 5500, say: "Do events share timestamps more than the sensor's own do? D<sub>async</sub> checks 25 clock views, from exact timestamps to 5 ms bins, and penalizes only excess sharing." },
+      { title: 'Timing', dur: 5500, say: "Does activity happen at the right moments in the window? D<sub>temp</sub> is the Wasserstein distance between the two streams' event-time distributions." },
+      { title: 'Combine', dur: 7000, say: 'Overlapping discrepancies are merged with B<sub>λ</sub>, which keeps the larger and adds a bounded share of the smaller. CEFS then multiplies count, polarity and core fidelity.' },
+    ];
+    const TILES = [['Count · D<sub>count</sub>', d => d.dcount, 3], ['Polarity · D<sub>pol</sub>', d => d.dpol, 3], ['Space–time · D<sub>ST</sub>', d => d.dst, 3],
+                   ['Asynchrony · D<sub>async</sub>', d => d.dasync, 4], ['Timing · D<sub>temp</sub>', d => d.dtemp, 3], ['CEFS ↑', d => d.q, 3]];
+    let comp = DATA.comparisons[0], cur = derive(comp), shown = { ...cur }, tween = null;
+    let step = 0, t0 = performance.now(), auto = !reduce, visible = false, dirty = true;
+
+    const pick = c => {
+      comp = c; const from = { ...shown }; cur = derive(c);
+      DATA.comparisons.forEach(o => document.getElementById('cw-' + o.id).setAttribute('aria-pressed', String(o === c)));
+      box.style.setProperty('--cw-c', c.id === 'ours' ? 'var(--ours)' : 'var(--base)');
+      $('#cw-gname').textContent = c.label;
+      $('#cw-sub').textContent = `${c.note} ${intl(evOf(c).m)} of ${intl(c.n)} events drawn.`;
+      tween = reduce ? null : { from, to: cur, t: performance.now() };
+      if (reduce) shown = { ...cur };
+      if (step === 0) t0 = performance.now();
+      panel(); paintTiles(); dirty = true;
+    };
+    DATA.comparisons.forEach((c, i) => {
+      const b = el('button', { type: 'button', id: 'cw-' + c.id, 'aria-pressed': String(i === 0) }, c.label);
+      b.addEventListener('click', () => pick(c));
+      $(c.id === 'ours' ? '#cw-main' : '#cw-cor').append(b);
+    });
+    TILES.forEach(([k], i) => {
+      const b = el('button', { type: 'button', class: 'cw-tile' + (i === 5 ? ' total' : ''), id: 'cw-t' + i },
+        `<span class="k">${k}</span><span class="v" id="cw-v${i}"></span><span class="b"><i id="cw-b${i}"></i></span>`);
+      b.addEventListener('click', () => { auto = false; syncPlay(); go(i); });
+      $('#cw-tiles').append(b);
+    });
+    const paintTiles = () => TILES.forEach(([, get, dp], i) => {
+      const v = get(shown);
+      $('#cw-v' + i).textContent = v.toFixed(dp);
+      $('#cw-b' + i).style.width = (clamp(v, 0, 1) * 100).toFixed(1) + '%';
+      $('#cw-t' + i).setAttribute('aria-pressed', String(i === step));
+    });
+    const playBtn = $('#cw-play');
+    const syncPlay = () => { playBtn.textContent = auto ? '❚❚' : '▶'; playBtn.setAttribute('aria-pressed', String(!auto)); playBtn.setAttribute('aria-label', auto ? 'Pause the walkthrough' : 'Play the walkthrough'); };
+    playBtn.addEventListener('click', () => { auto = !auto; syncPlay(); if (auto) t0 = performance.now(); });
+
+    /* Step panels: SVG in a 440 x 232 box, coloured by the page's tokens (compared stream: --cw-c). */
+    const sb = (s, f = 9) => `<tspan baseline-shift="sub" font-size="${f}">${s}</tspan>`;
+    const bw = (v, mx) => Math.max(0, v / mx * 250);
+    const pCount = (c, d) => {
+      const nr = WIN.n, ng = c.n, mx = Math.max(nr, ng), lr = Math.log2(ng / nr);
+      const X = v => 40 + (clamp(v, -3, 3) + 3) / 6 * 380, Y = v => 210 - v * 108;
+      let path = '';
+      for (let i = 0; i <= 60; i++) { const v = -3 + i / 10; path += (i ? 'L' : 'M') + X(v).toFixed(1) + ' ' + Y(1 - Math.exp(-v * v / 2)).toFixed(1); }
+      let s = `<text class="t-lab" x="0" y="24">Recording</text><rect class="real" id="cw-br" x="96" y="12" height="16" rx="3" width="${bw(nr, mx).toFixed(1)}"/>` +
+        `<text class="t-fg" id="cw-nr" x="${(102 + bw(nr, mx)).toFixed(1)}" y="24">${intl(nr)}</text>` +
+        `<text class="t-lab t-g" x="0" y="52">Compared</text><rect class="gen" id="cw-bg" x="96" y="40" height="16" rx="3" width="${bw(ng, mx).toFixed(1)}"/>` +
+        `<text class="t-fg" id="cw-ng" x="${(102 + bw(ng, mx)).toFixed(1)}" y="52">${intl(ng)}</text>`;
+      s += `<line class="ax" x1="${X(-3)}" x2="${X(3)}" y1="${Y(0)}" y2="${Y(0)}"/><line class="ax" x1="${X(0)}" x2="${X(0)}" y1="${Y(0)}" y2="${Y(1)}"/>`;
+      ['⅛×', '¼×', '½×', '1×', '2×', '4×', '8×'].forEach((t, i) => { s += `<text x="${X(i - 3)}" y="${Y(0) + 16}" text-anchor="middle">${t}</text>`; });
+      s += `<text x="${X(-3)}" y="${Y(1) - 10}">D${sb('count', 8)} = 1</text><text x="${X(3)}" y="${Y(1) - 10}" text-anchor="end">N${sb('g', 8)} / N${sb('r', 8)}, log scale</text>`;
+      s += `<path class="curve" d="${path}"/><line class="dash" x1="${X(lr)}" x2="${X(lr)}" y1="${Y(0)}" y2="${Y(d.dcount)}"/><circle class="mark" cx="${X(lr)}" cy="${Y(d.dcount)}" r="6"/>`;
+      return [s, `N<sub>g</sub> / N<sub>r</sub> = ${intl(ng)} / ${intl(nr)} = ${(ng / nr).toFixed(3)} → D<sub>count</sub> = ${d.dcount.toFixed(3)}`];
+    };
+    const pPol = (c, d) => {
+      const x0 = 104, w = 316, fr = WIN.on, fg = c.on, a = x0 + fr * w, b = x0 + fg * w, lo = Math.min(a, b), hi = Math.max(a, b);
+      const row = (y, lab, f, g) => `<text class="t-lab${g ? ' t-g' : ''}" x="0" y="${y + 18}">${lab}</text>` +
+        `<rect class="on" x="${x0}" y="${y}" width="${(f * w).toFixed(1)}" height="26"/><rect class="off" x="${(x0 + f * w).toFixed(1)}" y="${y}" width="${((1 - f) * w).toFixed(1)}" height="26"/>` +
+        `<text class="t-in" x="${x0 + 8}" y="${y + 18}">ON ${(f * 100).toFixed(1)}%</text><text class="t-in" x="${x0 + w - 8}" y="${y + 18}" text-anchor="end">OFF ${((1 - f) * 100).toFixed(1)}%</text>`;
+      let s = row(24, 'Recording', fr, false) + row(104, 'Compared', fg, true);
+      s += `<line class="dash r" x1="${a}" x2="${a}" y1="18" y2="170"/><line class="dash" x1="${b}" x2="${b}" y1="98" y2="170"/>`;
+      s += `<path class="brk" d="M${lo} 170 L${lo} 176 L${hi} 176 L${hi} 170"/><text class="t-fg" x="${(lo + hi) / 2}" y="196" text-anchor="middle">${(Math.abs(fr - fg) * 100).toFixed(1)} points apart</text>`;
+      return [s, `D<sub>pol</sub> = |${fr.toFixed(3)} − ${fg.toFixed(3)}| = ${d.dpol.toFixed(3)}`];
+    };
+    const TLAB = ['10 µs', '50 µs', '100 µs', '500 µs', '1 ms', '5 ms'], ST = { x0: 70, y0: 30, cw: 60, ch: 28 };
+    const pST = (c, d) => {
+      const wmax = Math.max(...DATA.weights);
+      let s = `<text x="0" y="24">spatial ↓</text><text x="${ST.x0}" y="10">temporal bin →</text>`;
+      TLAB.forEach((t, j) => { s += `<text x="${ST.x0 + j * ST.cw + (ST.cw - 3) / 2}" y="24" text-anchor="middle">${t}</text>`; });
+      DATA.spatial_px.forEach((px, i) => {
+        s += `<text x="${ST.x0 - 8}" y="${ST.y0 + i * ST.ch + 17}" text-anchor="end">${px} px</text>`;
+        for (let j = 0; j < 6; j++) {
+          const k = i * 6 + j, h = c.h[k], x = ST.x0 + j * ST.cw, y = ST.y0 + i * ST.ch, inv = h > 0.5 ? ' inv' : '';
+          s += `<rect x="${x}" y="${y}" width="${ST.cw - 3}" height="${ST.ch - 3}" rx="4" style="fill:color-mix(in oklab, var(--fg) ${Math.round(h * 88)}%, var(--raised))"/>`;
+          s += `<text class="${inv ? 't-inv' : 't-fg'}" x="${x + (ST.cw - 3) / 2}" y="${y + 14}" text-anchor="middle">${h.toFixed(2)}</text>`;
+          s += `<rect class="wbar${inv}" x="${x + 4}" y="${y + ST.ch - 9}" height="3" rx="1.5" width="${((ST.cw - 11) * DATA.weights[k] / wmax).toFixed(1)}"/>`;
+        }
+      });
+      s += `<g id="cw-scan"><rect class="scan-u" width="${ST.cw}" height="${ST.ch}" rx="5"/><rect class="scan" width="${ST.cw}" height="${ST.ch}" rx="5"/></g>`;
+      s += `<text x="${ST.x0}" y="190">number: distance h between the histograms (both polarities)</text>`;
+      s += `<text x="${ST.x0}" y="204">bar: weight w of that bin size, set by the recording alone</text>`;
+      s += `<text class="t-fg" id="cw-bin" x="${ST.x0}" y="226"></text>`;
+      return [s, `H<sub>ST</sub> = Σ w·h = ${d.hst.toFixed(3)} → D<sub>ST</sub> = H<sub>ST</sub><sup>2</sup> = ${d.dst.toFixed(3)}`];
+    };
+    const pAsync = (c, d) => {
+      const v = c.clock, mx = Math.max(...v), im = v.indexOf(mx), base = 186, H = 146, cap = 0.7;
+      let s = `<text x="0" y="14">excess timestamp sharing d in each clock view</text><line class="ax" x1="44" x2="430" y1="${base}" y2="${base}"/>`;
+      [0, 0.35, 0.7].forEach(t => { s += `<text x="38" y="${base - t / cap * H + 4}" text-anchor="end">${t.toFixed(2)}</text>`; });
+      ['exact'].concat(TLAB).forEach((l, i) => {
+        const x = 54 + i * 54, hgt = Math.min(v[i], cap) / cap * H;
+        s += `<rect class="${i === im && mx > 0 ? 'bar-max' : 'bar-r'}" x="${x}" y="${(base - hgt).toFixed(1)}" width="34" height="${Math.max(hgt, 0.8).toFixed(1)}" rx="3"/>`;
+        s += `<text class="t-fg" x="${x + 17}" y="${(base - hgt - 5).toFixed(1)}" text-anchor="middle">${v[i].toFixed(3)}</text><text x="${x + 17}" y="${base + 15}" text-anchor="middle">${l}</text>`;
+      });
+      s += `<text x="54" y="222">Rounding or batching timestamps raises these; the sensor's own ties do not.</text>`;
+      return [s, `D<sub>async</sub> = (max d)<sup>2</sup> = ${mx.toFixed(3)}<sup>2</sup> = ${d.dasync.toFixed(4)}`];
+    };
+    const pTemp = (c, d) => {
+      const x0 = 46, x1 = 430;
+      let s = '';
+      [['ON', 0], ['OFF', 1]].forEach(([name, pi], r) => {
+        const top = 10 + r * 96, hgt = 74, base = top + hgt, a = DATA.real.thist[pi], g = c.thist[pi];
+        const mx = Math.max(...a, ...g) || 1, n = a.length, X = i => x0 + (i + 0.5) / n * (x1 - x0), Y = v => base - v / mx * hgt;
+        let area = `M${x0} ${base}`, line = '';
+        g.forEach((v, i) => { area += ` L${X(i).toFixed(1)} ${Y(v).toFixed(1)}`; });
+        a.forEach((v, i) => { line += (i ? ' L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); });
+        s += `<text class="t-lab" x="0" y="${top + 16}">${name}</text><line class="ax" x1="${x0}" x2="${x1}" y1="${base}" y2="${base}"/>`;
+        s += `<path class="area-g" d="${area} L${x1} ${base} Z"/><path class="line-r" d="${line}"/>`;
+      });
+      s += `<text x="${x0}" y="200">0 ms</text><text x="${x1}" y="200" text-anchor="end">${LMS.toFixed(1)} ms</text><text x="${(x0 + x1) / 2}" y="200" text-anchor="middle">event time in the window</text>`;
+      s += `<text x="${x0}" y="222">line: recording · filled: compared stream</text>`;
+      return [s, `D<sub>temp</sub> = Σ<sub>Δ</sub> v<sub>Δ</sub>·W<sub>1</sub> / (L + 5 ms) = ${d.dtemp.toFixed(3)}, L = ${LMS.toFixed(1)} ms`];
+    };
+    const pComb = (c, d) => {
+      let s = `<text class="t-fg" x="0" y="18">D${sb('timing')} = B${sb('λT')}(D${sb('async')} ${d.dasync.toFixed(4)}, D${sb('temp')} ${d.dtemp.toFixed(3)}) = ${d.dtim.toFixed(3)}</text>`;
+      s += `<text class="t-fg" x="0" y="40">D${sb('core')} = B${sb('λC')}(D${sb('ST')} ${d.dst.toFixed(3)}, D${sb('timing')} ${d.dtim.toFixed(3)}) = ${d.dcore.toFixed(3)}</text>`;
+      [['count', d.C], ['pol', d.P], ['core', 1 - d.dcore]].forEach(([k, v], i) => {
+        const y = 66 + i * 34;
+        s += `<text class="t-lab" x="0" y="${y + 13}">1 − D${sb(k)}</text><rect class="track" x="90" y="${y}" width="200" height="18" rx="4"/>`;
+        s += `<rect class="bar-r" x="90" y="${y}" width="${(200 * v).toFixed(1)}" height="18" rx="4"/><text class="t-fg" x="298" y="${y + 13}">${v.toFixed(4)}</text>`;
+      });
+      s += `<text class="t-lab" x="0" y="214">CEFS</text><text class="t-big" x="90" y="218">${d.q.toFixed(3)}</text>`;
+      return [s, `CEFS = ${d.C.toFixed(4)} × ${d.P.toFixed(4)} × ${(1 - d.dcore).toFixed(4)} = ${d.q.toFixed(3)}`];
+    };
+    const PANELS = [pCount, pPol, pST, pAsync, pTemp, pComb];
+    const panel = () => {
+      $('#cw-n').textContent = `Step ${step + 1} of ${STEPS.length}`;
+      $('#cw-title').textContent = STEPS[step].title;
+      $('#cw-say').innerHTML = STEPS[step].say;
+      const [svg, eq] = PANELS[step](comp, cur);
+      $('#cw-viz').innerHTML = svg; $('#cw-eq').innerHTML = eq;
+    };
+    const go = i => { step = (i + STEPS.length) % STEPS.length; t0 = performance.now(); panel(); paintTiles(); dirty = true; };
+
+    /* Space–time clouds on the white plate: ON red, OFF blue (the clips' colours), faded = mixed 80% towards white. */
+    const canvas = $('#cw-canvas'), ctx = canvas.getContext('2d');
+    const PX = { on: 0xff0000ff, off: 0xffff0000, onF: 0xffccccff, offF: 0xffffcccc };
+    let CW = 0, CH = 0, DPR = 1, img = null, buf = null;
+    const resize = () => {
+      const r = canvas.getBoundingClientRect(); if (!r.width) return;
+      DPR = Math.min(2, devicePixelRatio || 1); CW = Math.round(r.width * DPR); CH = Math.round(r.height * DPR);
+      canvas.width = CW; canvas.height = CH; img = ctx.createImageData(CW, CH); buf = new Uint32Array(img.data.buffer); dirty = true;
+    };
+    const draw = now => {
+      if (!buf) return;
+      buf.fill(0);
+      const el_ = now - t0, AY = WIN.H / WIN.W, TD = 0.62;
+      const yaw = reduce ? 0.62 : 0.62 + 0.2 * Math.sin(now / 14000 * 2 * Math.PI), pitch = 0.33;
+      const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), S = Math.min(CW / 2 / 1.62, CH / 1.36);
+      const reveal = step === 0 && !reduce ? Math.min(1, el_ / 2600) : 1, tau = reveal * LUS;
+      let pol = 3, slab = null, scan = -1;
+      if (step === 1 && !reduce) { const ph = Math.floor(el_ / 1500) % 3; pol = ph === 0 ? 3 : ph; }
+      if (step === 2) { scan = reduce ? 29 : Math.min(29, Math.floor(el_ / 180)); const dt = DATA.temporal_us[scan % 6]; slab = [LUS / 2 - dt / 2, LUS / 2 + dt / 2]; }
+      const proj = (ox, oy, X, Y, T) => { const u = X * cy + T * sy, w = -X * sy + T * cy; return [ox + u * S, oy + (Y * cp - w * sp) * S]; };
+      const fr = [], origins = [];
+      [REAL, evOf(comp)].forEach((E, ci) => {
+        const ox = CW * (0.25 + 0.5 * ci), oy = CH * 0.5; origins.push([ox, oy]);
+        let cnt = 0;
+        for (let i = 0; i < E.m; i++) {
+          const t = E.t[i]; if (t > tau) continue; cnt++;
+          const X = E.x[i] / WIN.W - 0.5, Y = (E.y[i] / WIN.H - 0.5) * AY, T = (t / LUS - 0.5) * 2 * TD;
+          const px = (ox + (X * cy + T * sy) * S) | 0, py = (oy + (Y * cp - (-X * sy + T * cy) * sp) * S) | 0;
+          if (px < 0 || py < 0 || px >= CW - 1 || py >= CH - 1) continue;
+          const on = E.p[i] === 1, k = py * CW + px;
+          if (!(pol & (on ? 1 : 2)) || (slab && (t < slab[0] || t > slab[1]))) { if (buf[k] === 0) buf[k] = on ? PX.onF : PX.offF; }
+          else { const col = on ? PX.on : PX.off; buf[k] = col; if (DPR > 1.5) { buf[k + 1] = col; buf[k + CW] = col; buf[k + CW + 1] = col; } }
+        }
+        fr.push(E.m ? cnt / E.m : 1);
+      });
+      ctx.putImageData(img, 0, 0);
+      const corners = [];
+      for (const X of [-0.5, 0.5]) for (const Y of [-AY / 2, AY / 2]) for (const T of [-TD, TD]) corners.push([X, Y, T]);
+      const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+      const plane = (ox, oy, T) => { const q = [[-0.5, -AY / 2], [0.5, -AY / 2], [0.5, AY / 2], [-0.5, AY / 2]].map(([X, Y]) => proj(ox, oy, X, Y, T)); ctx.beginPath(); q.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.stroke(); };
+      ctx.font = `500 ${10.5 * DPR}px ${MONO || 'monospace'}`;
+      origins.forEach(([ox, oy]) => {
+        ctx.lineWidth = DPR; ctx.strokeStyle = 'rgba(17, 20, 27, 0.32)'; ctx.beginPath();
+        edges.forEach(([a, b]) => { ctx.moveTo(...proj(ox, oy, ...corners[a])); ctx.lineTo(...proj(ox, oy, ...corners[b])); }); ctx.stroke();
+        /* Time labels along the outer bottom-right edge, both outside the box and inside the canvas. */
+        const a = proj(ox, oy, 0.5, AY / 2, -TD), b = proj(ox, oy, 0.5, AY / 2, TD);
+        ctx.fillStyle = '#596173'; ctx.textAlign = 'center'; ctx.fillText('t = 0', a[0], a[1] + 14 * DPR);
+        ctx.textAlign = 'right'; ctx.fillText(`${LMS.toFixed(1)} ms`, b[0], b[1] + 14 * DPR);
+        ctx.strokeStyle = 'rgba(17, 20, 27, 0.8)'; ctx.lineWidth = 1.4 * DPR;
+        if (step === 0 && reveal < 1) plane(ox, oy, (reveal - 0.5) * 2 * TD);
+        if (slab) {
+          slab.forEach(tt => plane(ox, oy, (tt / LUS - 0.5) * 2 * TD));
+          const s = DATA.spatial_px[Math.floor(scan / 6)];
+          if (s / WIN.W * S >= 4 * DPR) {
+            ctx.strokeStyle = 'rgba(17, 20, 27, 0.22)'; ctx.lineWidth = DPR; ctx.beginPath();
+            for (let x = 0; x <= WIN.W; x += s) { ctx.moveTo(...proj(ox, oy, x / WIN.W - 0.5, -AY / 2, 0)); ctx.lineTo(...proj(ox, oy, x / WIN.W - 0.5, AY / 2, 0)); }
+            for (let y = 0; y <= WIN.H; y += s) { ctx.moveTo(...proj(ox, oy, -0.5, (y / WIN.H - 0.5) * AY, 0)); ctx.lineTo(...proj(ox, oy, 0.5, (y / WIN.H - 0.5) * AY, 0)); }
+            ctx.stroke();
+          }
+        }
+      });
+      if (step === 0) {
+        const mx = Math.max(WIN.n, comp.n), nr = WIN.n * fr[0], ng = comp.n * fr[1], br = document.getElementById('cw-br');
+        if (br) {
+          br.setAttribute('width', bw(nr, mx).toFixed(1)); document.getElementById('cw-bg').setAttribute('width', bw(ng, mx).toFixed(1));
+          const tr = document.getElementById('cw-nr'), tg = document.getElementById('cw-ng');
+          tr.setAttribute('x', (102 + bw(nr, mx)).toFixed(1)); tg.setAttribute('x', (102 + bw(ng, mx)).toFixed(1));
+          tr.textContent = intl(nr); tg.textContent = intl(ng);
+        }
+      }
+      if (step === 2) {
+        const g = document.getElementById('cw-scan'), lab = document.getElementById('cw-bin'), i = Math.floor(scan / 6), j = scan % 6;
+        if (g) g.setAttribute('transform', `translate(${ST.x0 + j * ST.cw - 1.5} ${ST.y0 + i * ST.ch - 1.5})`);
+        if (lab) lab.textContent = `bin ${DATA.spatial_px[i]} px × ${TLAB[j]}: h = ${comp.h[scan].toFixed(2)}, weight ${(DATA.weights[scan] * 100).toFixed(1)}%`;
+      }
+    };
+
+    /* The walkthrough starts at step 1 when it first comes into view, and resumes its current step when it comes back. */
+    let seen = false;
+    new IntersectionObserver(([e]) => {
+      const was = visible; visible = e.isIntersecting; dirty = true;
+      if (visible && !was) { if (!seen) { seen = true; go(0); } else t0 = performance.now(); }
+    }).observe(box);
+    new ResizeObserver(resize).observe(canvas);
+    cefsWalk.redraw = () => { dirty = true; };
+    cefsWalk.tick = now => {
+      if (!visible) return;
+      if (auto && now - t0 > STEPS[step].dur) go(step + 1);
+      if (tween) {
+        const k = Math.min(1, (now - tween.t) / 600), e = 1 - Math.pow(1 - k, 3);
+        for (const key in tween.to) shown[key] = tween.from[key] + (tween.to[key] - tween.from[key]) * e;
+        paintTiles(); if (k >= 1) tween = null;
+      }
+      if (!reduce || dirty || auto) { draw(now); dirty = false; }
+    };
+    syncPlay(); resize(); pick(comp);
+  });
+  themeHooks.push(() => cefsWalk.redraw());
+
   /* ---------- BibTeX ---------- */
   safely('BibTeX', () => {
   const copyBtn = $('#copy-bib');
@@ -1530,7 +1881,7 @@ footer a { color: var(--muted); }
     const wall = Date.now(); if (wall - lastWall >= AWAY_MS) safely('revive', revive); lastWall = wall;
     const dt = Math.min(0.1, (now - lastNow) / 1000); lastNow = now;
     stages.forEach((s, i) => safely('panel ' + (i + 1), () => s.tick(now, dt)));
-    safely('How it works animation', () => hw.tick(now)); safely('hero animation', () => heroTick(now)); safely('watchdog', () => watchdog(now));
+    safely('How it works animation', () => hw.tick(now)); safely('hero animation', () => heroTick(now)); safely('watchdog', () => watchdog(now)); safely('CEFS walkthrough', () => cefsWalk.tick(now));
   };
   requestAnimationFrame(loop);
   setTimeout(onScroll, 0);
